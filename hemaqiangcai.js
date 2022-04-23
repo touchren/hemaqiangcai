@@ -25,6 +25,8 @@ var hasFindAllItems = false;
 var offsetX = 0;
 var offsexY = 0;
 
+var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
+
 // 调试期间临时使用, 关闭其他脚本
 engines.all().map((ScriptEngine) => {
   log("engines.myEngine().toString():" + engines.myEngine().toString());
@@ -99,24 +101,18 @@ function musicNotify() {
 function findAllItems() {
   // (/(.+g|.+盒|.+枚|.+袋|.+\)|.+装|.+只|.+L)/)
   if (!hasFindAllItems) {
-    let items = className("android.view.View")
-      .depth(18)
-      .textMatches(/(.+)/)
-      .find();
-    log("itemName.size():" + items.size());
     let totalItemsStr = "";
     let itemIdx = 0;
+    let items = listAllItems();
     for (let v of items) {
       itemIdx++;
       if (itemIdx == 1) {
         log("第一个商品标题坐标: " + v.bounds());
-
         let item1 = className("android.view.View")
           .depth(16)
           .clickable(true)
           .findOne(10000);
         log("第一个商品选项框坐标: " + item1.bounds());
-
         hasFindAllItems = true;
         offsetX = v.bounds().centerX() - item1.bounds().centerX();
         offsetY = v.bounds().centerY() - item1.bounds().centerY();
@@ -126,6 +122,33 @@ function findAllItems() {
     }
     log(totalItemsStr);
   }
+}
+
+function listAllItems() {
+  let items;
+  if (itemFilterStr) {    
+    items = className("android.view.View").depth(18).textMatches(itemFilterStr).find();
+  } else {
+    items = className("android.view.View").depth(18).textMatches(/(.+)/).find();
+  }
+  log("itemName.size():" + items.size());
+  return items;
+}
+
+function filterActiveItem(item) {
+  let isActive = true;
+  let itemDiv = item.parent().parent().parent().parent();
+  // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+  itemDiv.find(className("android.widget.Image")).each(function (temp) {
+    log("子信息项:" + temp);
+    if (
+      temp.text() ==
+      "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_"
+    ) {
+      isActive = false;
+    }
+  });
+  return isActive;
 }
 
 function getItemInfo(v) {
@@ -287,9 +310,16 @@ function doInItemSel() {
       let first = findFirstItem();
       // 默认是 [已选0件]
       let checkedTxt = textStartsWith("已选").findOne(1000);
+      // 打印所有可买商品
+      listAllItems.filter(filterActiveItem).each(function (activeItem) {
+        try {
+          log("INFO: 可购买商品信息: " + getItemInfoByRadio(activeItem));
+        } catch (e) {
+          log(e);
+        }
+      });
       // log(checkedTxt);
       if (checkedTxt && checkedTxt.text() == "已选0件") {
-        // TODO: 打印商品信息, 需要通过
         try {
           log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
         } catch (e) {
