@@ -2,10 +2,10 @@
 const APP_NAME = "盒马";
 // 最大尝试轮数
 const MAX_ROUND = 10;
-// 每轮最长重试次数 (平均单次1.2秒)
-const MAX_TIMES_PER_ROUND = 50000;
+// 每轮最长重试次数 (平均单次秒)
+const MAX_TIMES_PER_ROUND = 500;
 // 点击按钮之后的通用等待时间
-const COMMON_SLEEP_TIME_IN_MILLS = 500;
+const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
 const ACTIVE_STOP_APP = 0;
 
@@ -25,6 +25,8 @@ var hasFindAllItems = false;
 var offsetX = 0;
 var offsexY = 0;
 
+// 过滤商品的正则表示式 .+ 表示所有商品
+// var itemFilterStr = ".+";
 var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
 
 // 调试期间临时使用, 关闭其他脚本
@@ -42,12 +44,12 @@ auto.waitFor();
 while (round < MAX_ROUND) {
   round++;
   log("开始第" + round + "轮抢菜");
-  try {
-    start();
-  } catch (e) {
-    log("异常: 出现中断性问题");
-    log(e);
-  }
+  // try {
+  start();
+  // } catch (e) {
+  //   log("异常: 出现中断性问题");
+  //   log(e);
+  // }
   let randomSleep = random(30 * 1000, 90 * 1000);
   log("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
   // 随机休息30-90秒
@@ -77,6 +79,9 @@ function start() {
       log("ERROR: 当前在其他页面");
       back();
       commonWait();
+
+      launchApp(APP_NAME);
+      commonWait();
     }
   }
   toastLog(
@@ -98,12 +103,16 @@ function musicNotify() {
   // sleep(media.getMusicDuration());
 }
 
-function findAllItems() {
+function printAllItems() {
   // (/(.+g|.+盒|.+枚|.+袋|.+\)|.+装|.+只|.+L)/)
   if (!hasFindAllItems) {
     let totalItemsStr = "";
     let itemIdx = 0;
-    let items = listAllItems();
+    let items = className("android.view.View")
+      .depth(18)
+      .textMatches(/(.+)/)
+      .find();
+    log("INFO allItems.size():" + items.size());
     for (let v of items) {
       itemIdx++;
       if (itemIdx == 1) {
@@ -126,12 +135,15 @@ function findAllItems() {
 
 function listAllItems() {
   let items;
-  if (itemFilterStr) {    
-    items = className("android.view.View").depth(18).textMatches(itemFilterStr).find();
+  if (itemFilterStr) {
+    items = className("android.view.View")
+      .depth(18)
+      .textMatches(itemFilterStr)
+      .find();
   } else {
     items = className("android.view.View").depth(18).textMatches(/(.+)/).find();
   }
-  log("itemName.size():" + items.size());
+  log("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
   return items;
 }
 
@@ -139,16 +151,59 @@ function filterActiveItem(item) {
   let isActive = true;
   let itemDiv = item.parent().parent().parent().parent();
   // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
-  itemDiv.find(className("android.widget.Image")).each(function (temp) {
-    log("子信息项:" + temp);
+  // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
+  // log("each4");
+
+  itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
+    // TODO 220424 暂时屏蔽
+    // log("子信息项:" + temp);
     if (
       temp.text() ==
-      "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_"
+        "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_" ||
+      temp.text() ==
+        "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
     ) {
       isActive = false;
+      // log("确认商品[" + item.text() + "]无运力");
     }
   });
+
+  // if (item.text().indexOf("黑牛") != -1) {
+  //   // 模拟商品可用
+  //   isActive = true;
+  // }
+  if (isActive) {
+    //log("INFO 确认商品[" + item.text() + "]可购买");
+  }
   return isActive;
+}
+
+function clickRadioByItem(item) {
+  let itemDiv = item.parent().parent().parent().parent();
+  let checkBtns = itemDiv.find(
+    className("android.view.View").depth(16).clickable()
+  );
+  // 220424 测试, 会返回3-4个对象,
+  // 其中0,1点了是可以选中的, 根据坐标来看, 可能
+  // 0是选项框, (69, 990 - 123, 1044)
+  // 1是图片, (153, 903 - 369, 1131)
+  checkBtns.forEach(function (temp, idx) {
+    // log(item.text() + ",可能的选项框" + idx + ":" + temp);
+    // log("点击第" + idx + "个选项");
+    // temp.click();
+    // sleep(10000);
+    // log("再次点击第" + idx + "个选项");
+    // temp.click();
+    // sleep(10000);
+  });
+  let checkBtn = checkBtns[0];
+  log("点击" + item.text() + "的选项框");
+  checkBtn.click();
+  commonWait();
+  // sleep(10000);
+  // log("再次点击" + item.text() + "的选项框");
+  // checkBtn.click();
+  // sleep(10000);
 }
 
 function getItemInfo(v) {
@@ -156,21 +211,56 @@ function getItemInfo(v) {
   // log("第一个商品信息坐标: " + infoDiv.bounds());
   // log(infoDiv);
   // className("android.view.View")
+  // log("each1");
   let infoList = infoDiv.find(textMatches(".+")).each(function (temp) {
     // log("子信息项:" + temp);
   });
   // idx 0: 标题
-  // idx 1: 描述
+  // idx 1: 描述 (可能没有)
   // idx 2: 货币(￥)
   // idx 3: 整数金额
   // idx 4: 小数金额 (可能没有)
   // idx 5: 单位 (可能是4)
-  return (
-    infoList.get(0).text() +
-    "-" +
-    infoList.get(3).text() +
-    infoList.get(infoList.size() - 1).text()
-  );
+  if (infoList.size() >= 6) {
+    // 价格有小数的情况
+    return (
+      infoList.get(0).text() +
+      "-" +
+      infoList.get(3).text() +
+      infoList.get(4).text() +
+      infoList.get(infoList.size() - 1).text() +
+      "-" +
+      infoList.size()
+    );
+  } else if (infoList.size() == 5) {
+    // 价格是整数, 有描述的情况
+    // 价格是整数+小数, 没有描述的情况
+    if (infoList.get(1).text().length > 1) {
+      // 有描述, 没有小数
+      return (
+        infoList.get(0).text() +
+        "-" +
+        infoList.get(3).text() +
+        ".0" +
+        infoList.get(infoList.size() - 1).text() +
+        "-" +
+        infoList.size()
+      );
+    } else {
+      // 没有描述, 有小数
+      return (
+        infoList.get(0).text() +
+        "-" +
+        infoList.get(2).text() +
+        infoList.get(3).text() +
+        infoList.get(infoList.size() - 1).text() +
+        "-" +
+        infoList.size()
+      );
+    }
+  } else {
+    return infoList.get(0).text() + "(" + infoList.size() + ")";
+  }
 }
 
 function getItemInfoByRadio(v) {
@@ -178,6 +268,7 @@ function getItemInfoByRadio(v) {
   // log("第一个商品信息坐标: " + infoDiv.bounds());
   //log(infoDiv);
   // className("android.view.View")
+  log("each2");
   let infoList = infoDiv
     .find(textMatches(".+"))
     .find(className("android.view.View"))
@@ -185,7 +276,8 @@ function getItemInfoByRadio(v) {
       //log("子信息项:" + temp);
     });
   // idx 0: 图片
-  // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+  // idx 1: 图片 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+  //             今日售完 text = O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
   // idx 2: 图片
   // idx 3: 标题
   // idx 4: 描述
@@ -193,12 +285,7 @@ function getItemInfoByRadio(v) {
   // idx 6: 整数金额
   // idx 7: 小数金额 (可能没有)
   // idx 8: 单位 (可能是4)
-  return (
-    infoList.get(0).text() +
-    "-" +
-    infoList.get(3).text() +
-    infoList.get(infoList.size() - 1).text()
-  );
+  return infoList.get(0).text();
 }
 
 function findFirstItem() {
@@ -289,6 +376,54 @@ function doInSubmit() {
   }
 }
 
+function findActiveItems() {
+  var activeItems = new Array();
+  // 打印所有可买商品
+  // log("each3");
+  let allItems = listAllItems();
+  // 模拟购买的第一件商品
+  // let activeItem = allItems.get(0);
+  // let activeItemX = activeItem.bounds().centerX();
+  // let activeItemY = activeItem.bounds().centerY();
+  // log("模拟第一件商品的坐标:[" + activeItemX + "," + activeItemY + "]");
+  // log(
+  //   "推测商品选中框的坐标:[" +
+  //     (activeItemX - offsetX) +
+  //     "," +
+  //     (activeItemY - offsetY) +
+  //     "]"
+  // );
+
+  for (var i = 0; i < allItems.length; i++) {
+    var tempItem = allItems[i];
+    if (filterActiveItem(tempItem)) {
+      activeItems.push(tempItem);
+      try {
+        log("INFO: 可购买商品信息: " + getItemInfo(tempItem));
+        // if (i == 0) {
+        //   let activeItemX = tempItem.bounds().centerX();
+        //   let activeItemY = tempItem.bounds().centerY();
+        //   log("第一件可买商品的坐标:[" + activeItemX + "," + activeItemY + "]");
+        //   log(
+        //     "INFO 点击第一件可买商品选中框的坐标:[" +
+        //       (activeItemX - offsetX) +
+        //       "," +
+        //       (activeItemY - offsetY) +
+        //       "]"
+        //   );
+        //   log("WARN: 临时关闭了点击商品功能");
+        //   // 因为不在可见范围, 所以无法点击
+        //   // click(activeItemX - offsetX, activeItemY - offsetY);
+        //   commonWait();
+        // }
+      } catch (e) {
+        log(e);
+      }
+    }
+  }
+  return activeItems;
+}
+
 /** 商品选择页处理逻辑 */
 function doInItemSel() {
   // text("小区提货点").exists()
@@ -297,7 +432,7 @@ function doInItemSel() {
   let specialPackageTxt = text("特供套餐").findOne(1000);
   if (specialPackageTxt) {
     // 遍历所有的商品及计算偏移量
-    findAllItems();
+    printAllItems();
     //log("当前在营业时间");
     // 判断是否 运力已满
     let noExpressExt = text("运力已约满").findOne(1000);
@@ -307,26 +442,33 @@ function doInItemSel() {
       commonWait();
     } else {
       log("INFO: 开始选择商品");
-      let first = findFirstItem();
+
       // 默认是 [已选0件]
       let checkedTxt = textStartsWith("已选").findOne(1000);
-      // 打印所有可买商品
-      listAllItems.filter(filterActiveItem).each(function (activeItem) {
-        try {
-          log("INFO: 可购买商品信息: " + getItemInfoByRadio(activeItem));
-        } catch (e) {
-          log(e);
-        }
-      });
       // log(checkedTxt);
       if (checkedTxt && checkedTxt.text() == "已选0件") {
-        try {
-          log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
-        } catch (e) {
-          log(e);
+        // TODO 1, 首先获取所有符合条件的商品
+        let activeItems = findActiveItems();
+        if (activeItems.length == 0) {
+          log("INFO 没有符合条件的可选商品, 下单第一件");
+          // TODO 3, 没有符合条件商品的情况下, 下单第一件商品
+          let first = findFirstItem();
+          try {
+            log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
+            first.click();
+            commonWait();
+          } catch (e) {
+            log(e);
+          }
+        } else {
+          // TODO 2, 依次选中
+          log("INFO 找到符合条件的商品, 选中所有商品");
+          for (item of activeItems) {
+            log("INFO 开始选中:" + item.text());
+            clickRadioByItem(item);
+          }
         }
-        first.click();
-        commonWait();
+        // TODO
       } else {
         log("当前商品情况:" + checkedTxt.text());
       }
@@ -366,6 +508,8 @@ function doInHome() {
     text("小区提货点").findOne(5000);
   } else {
     log("没有找到进入团购的按钮");
+    back();
+    commonWait();
   }
 }
 
