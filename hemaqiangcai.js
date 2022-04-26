@@ -23,10 +23,7 @@ var isSuccessed = false;
 // 遍历所有商品
 var hasFindAllItems = false;
 
-// 商品选项框跟标题的偏移量
-var offsetX = 0;
-var offsexY = 0;
-
+// 商品下单逻辑 (暂未启用)
 // 0 优先抢符合条件的商品, 如果都没有则抢第一件商品
 var buyMode = 0;
 
@@ -55,18 +52,18 @@ auto.waitFor();
 while (round < MAX_ROUND) {
   round++;
   log("开始第" + round + "轮抢菜");
-  // try {
-  start();
-  // } catch (e) {
-  //   log("异常: 出现中断性问题");
-  //   log(e);
-  // }
+  try {
+    start();
+  } catch (e) {
+    console.error("ERROR0: 出现中断性问题", e.stack);
+    musicNotify("09.error");
+    //console.error(e.stack);
+  }
   let randomSleep = random(30 * 1000, 90 * 1000);
-  log("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
-  // 随机休息30-90秒
+  toastLog("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
   sleep(randomSleep);
 }
-log("程序正常结束");
+toastLog("程序结束");
 
 function start() {
   count = 0;
@@ -77,14 +74,13 @@ function start() {
   }
   launchApp(APP_NAME);
   commonWait();
-  sleep(2600);
-  click_i_know();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
-    let page = textMatches(
-      /(我知道了|确定|搜索|小区提货点|确认订单)/
-    ).findOne(5000);
+    let page = textMatches(/(我知道了|确定|搜索|小区提货点|确认订单)/).findOne(
+      5000
+    );
 
     if (page) {
+      log("进入条件1:[" + page.text() + "]");
       if (page.text() == "小区提货点") {
         // 购物车
         doInItemSel();
@@ -93,9 +89,11 @@ function start() {
         doInHome();
       } else if (page.text() == "确认订单") {
         // 提交订单
+        // 选择时间
+        // 确认支付
         doInSubmit();
       } else if (page.text() == "我知道了") {
-        // 系统提示, 点掉即可
+        // 系统提示, 点掉即可 (220426 盒马里面好像并没有这个按钮)
         click_i_know();
       } else if (page.text() == "确定") {
         // 系统提示, 点掉即可
@@ -104,18 +102,18 @@ function start() {
         back();
         commonWait();
       } else {
-        console.error("ERROR2: 当前在其他页面");
+        console.error("ERROR1: 当前在其他页面");
         musicNotify("09.error");
-        commonWait();
+        sleep(1000);
       }
     } else {
       let page2 = descMatches(/(支付成功)/).findOne(3000);
       if (page2) {
-        if(page2.desc()=="支付成功"){
+        if (page2.desc() == "支付成功") {
           paySuccess();
         }
       } else {
-        console.error("ERROR: 无法判断当前在哪个页面");
+        console.error("ERROR2: 无法判断当前在哪个页面");
         musicNotify("09.error");
         sleep(1000);
       }
@@ -123,12 +121,7 @@ function start() {
 
     // 太容易阻碍操作了
     let packageName = currentPackage();
-    if (
-      packageName == PACKAGE_NAME ||
-      packageName == AUTO_JS_PACKAGE_NAME ||
-      packageName == "com.tencent.qqpinyin"
-    ) {
-    } else {
+    if (packageName != PACKAGE_NAME && packageName != AUTO_JS_PACKAGE_NAME) {
       interruptCount++;
       toastLog(
         "WANR: 页面已经被切至:" +
@@ -165,7 +158,7 @@ function paySuccess() {
   if (returnBtn) {
     clickByCoor(returnBtn);
   } else {
-    console.error("ERROR 支付成功 页面找不到[完成]按钮");
+    console.error("ERROR3 支付成功 页面找不到[完成]按钮");
     musicNotify("09.error");
     commonWait();
   }
@@ -175,21 +168,17 @@ function musicNotify(name) {
   if (name == null) {
     name = "success";
   }
-  // 心如止水
   let m = "/storage/emulated/0/Download/" + name + ".mp3";
   try {
     console.time("music[" + name + "] 耗时");
     media.playMusic(m);
     console.timeEnd("music[" + name + "] 耗时");
   } catch (e) {
-    console.error("播放文件不存在:" + m);
-    console.error(e);
+    console.error("播放文件不存在:" + m, e);
   }
-  // sleep(media.getMusicDuration());
 }
 
 function printAllItems() {
-  // (/(.+g|.+盒|.+枚|.+袋|.+\)|.+装|.+只|.+L)/)
   if (!hasFindAllItems) {
     let totalItemsStr = "";
     let itemIdx = 0;
@@ -208,9 +197,6 @@ function printAllItems() {
           .findOne(10000);
         log("第一个商品选项框坐标: " + item1.bounds());
         hasFindAllItems = true;
-        offsetX = v.bounds().centerX() - item1.bounds().centerX();
-        offsetY = v.bounds().centerY() - item1.bounds().centerY();
-        log("offsetX=" + offsetX + ",offsetY=" + offsetY);
       }
       totalItemsStr = totalItemsStr + itemIdx + ":" + getItemInfo(v) + "; ";
     }
@@ -219,15 +205,10 @@ function printAllItems() {
 }
 
 function listAllItems() {
-  let items;
-  if (itemFilterStr) {
-    items = className("android.view.View")
-      .depth(18)
-      .textMatches(itemFilterStr)
-      .find();
-  } else {
-    items = className("android.view.View").depth(18).textMatches(/(.+)/).find();
-  }
+  let items = className("android.view.View")
+    .depth(18)
+    .textMatches(itemFilterStr)
+    .find();
   log("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
   return items;
 }
@@ -237,10 +218,7 @@ function filterActiveItem(item) {
   let itemDiv = item.parent().parent().parent().parent();
   // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
   // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
-  // log("each4");
-
   itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
-    // TODO 220426 暂时屏蔽, 明天早上 0427 的时候, 需要看下 今日售完 的图片
     // log("子信息项"+idx+":" + temp);
     if (
       temp.text() ==
@@ -249,17 +227,13 @@ function filterActiveItem(item) {
         "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
     ) {
       isActive = false;
-      // log("确认商品[" + item.text() + "]无运力");
+      // log("确认商品[" + item.text() + "]无运力或今日售完");
     }
   });
 
-  // if (item.text().indexOf("黑牛") != -1) {
-  //   // 模拟商品可用
-  //   isActive = true;
+  // if (isActive) {
+  //   log("INFO 确认商品[" + item.text() + "]可购买");
   // }
-  if (isActive) {
-    //log("INFO 确认商品[" + item.text() + "]可购买");
-  }
   return isActive;
 }
 
@@ -274,6 +248,7 @@ function clickRadioByItem(item) {
   // 1是图片, (153, 903 - 369, 1131)
   checkBtns.forEach(function (temp, idx) {
     // log(item.text() + ",可能的选项框" + idx + ":" + temp);
+    // 下面的代码用来验证哪个对象是能点击的 (这些对象因为是不可见的, 所以不能通过坐标点击)
     // log("点击第" + idx + "个选项");
     // temp.click();
     // sleep(10000);
@@ -284,19 +259,17 @@ function clickRadioByItem(item) {
   let checkBtn = checkBtns[0];
   log("点击" + item.text() + "的选项框");
   checkBtn.click();
-  // commonWait();
-  // sleep(10000);
-  // log("再次点击" + item.text() + "的选项框");
-  // checkBtn.click();
-  // sleep(10000);
+  // 因为商品选中这个操作并不会与后台接口交互数据, 所以特别的, 这里并不设置等待
 }
 
+/**
+ * 拼接返回商品描述
+ * @param {商品标题UIObject} v
+ * @returns
+ */
 function getItemInfo(v) {
   let infoDiv = v.parent().parent().parent();
-  // log("第一个商品信息坐标: " + infoDiv.bounds());
-  // log(infoDiv);
   // className("android.view.View")
-  // log("each1");
   let infoList = infoDiv.find(textMatches(".+")).each(function (temp) {
     // log("子信息项:" + temp);
   });
@@ -348,11 +321,13 @@ function getItemInfo(v) {
   }
 }
 
+/**
+ * 根据商品选项框返回商品信息
+ * @param {商品选项框UIObject} v
+ * @returns
+ */
 function getItemInfoByRadio(v) {
   let infoDiv = v.parent().parent();
-  // log("第一个商品信息坐标: " + infoDiv.bounds());
-  //log(infoDiv);
-  // className("android.view.View")
   log("each2");
   let infoList = infoDiv
     .find(textMatches(".+"))
@@ -373,29 +348,15 @@ function getItemInfoByRadio(v) {
   return infoList.get(0).text();
 }
 
+/**
+ * 获取第一个商品的选项框
+ * @returns
+ */
 function findFirstItem() {
   let item1 = className("android.view.View")
     .depth(16)
     .clickable(true)
     .findOne(10000);
-
-  // textMatches()
-  // 商品标题 depth==18
-  // let testItem = textMatches(/(叶菜组合.*)/)
-  //   .depth(18)
-  //   .findOne(1000);
-  // log(testItem);
-  // log(testItem.depth());
-
-  // 商品描述 depth==19
-  // let testItem2 = textMatches(/(红米.*)/).findOne(1000);
-  // log(testItem2);
-  // log(testItem2.depth());
-
-  // log("itemName1:" + itemName1.get(1));
-  // log(item1);
-  //log(item1.parent());
-  //log(item1.parent().parent());
   return item1;
 }
 
@@ -418,7 +379,7 @@ function clickByCoor(obj) {
 function doInSubmit() {
   log("已进入[确认订单]页面");
   musicNotify("01.submit");
-  // 注意 合计: , 跟金额并不是一个控件
+  // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   let selectTimeBtn = textMatches(
     "(确认付款|.*前送达|选择时间|￥0.00)"
   ).findOne(3000);
@@ -449,37 +410,20 @@ function doInSubmit() {
       log("找到类似于[**前送达]的选择项");
       orderConfirm();
     }
-    // else {
-    //   log("推测已经选好了时间:[" + selectTimeBtn.text() + "]");
-    // }
-    // log("商品已经失效, 没有选择时间的按钮");
   } else {
-    console.error("ERROR 未知情况, 继续");
+    console.error("ERROR4 未知情况, 继续");
     musicNotify("09.error");
   }
 }
 
 function orderConfirm() {
-  //  textMatches("(touchway43|13801954481)")
   className("android.widget.EditText")
     .focusable()
     .clickable()
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
-      // child.click();
-      // if (idx == 0 && child.text() != RECEIPT_NAME) {
-      //   //child.setText(RECEIPT_NAME);
-      // } else if (idx == 1 && child.text() != RECEIPT_PHONE) {
-      //   //child.setText(RECEIPT_PHONE);
-      //   //input(1,"13764378792");
-      // } else {
-      //   if (child.text() != RECEIPT_ADDRESS) {
-      //     // commonWait();
-      //     input(2, RECEIPT_ADDRESS);
-      //     //child.setText(RECEIPT_ADDRESS);
-      //   }
-      // }
+      // input(2, RECEIPT_ADDRESS);
     });
 
   let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(2000);
@@ -502,48 +446,40 @@ function orderConfirm() {
           commonWait();
           click_i_know();
         } else {
-          // 等待用户付款
-          log("等待用户手工付款");
-          sleep(3000);
+          // 确认付款
+          payConfirm();
         }
       } else {
-        console.error("未知情况");
+        console.error("ERROR5 未知情况");
         musicNotify("09.error");
       }
     }
   } else {
-    console.error("ERROR 没有找到金额");
+    console.error("ERROR6 没有找到金额");
     musicNotify("09.error");
   }
 }
 
+/**
+ * 确认付款这个页面因为还需要输入密码/指纹, 所以只能人工操作
+ */
 function payConfirm() {
   let payBtn = textMatches(".*确认付款.*").findOne(1000);
   if (payBtn) {
     log("已经进入支付页面, 按钮[" + payBtn.text() + "]");
     // 标记为成功
     isSuccessed = true;
-    musicNotify();
+    // 等待用户付款
+    log("等待用户手工付款");
+    sleep(3000);
+    //musicNotify();
   }
 }
 
 function findActiveItems() {
   var activeItems = new Array();
   // 打印所有可买商品
-  // log("each3");
   let allItems = listAllItems();
-  // 模拟购买的第一件商品
-  // let activeItem = allItems.get(0);
-  // let activeItemX = activeItem.bounds().centerX();
-  // let activeItemY = activeItem.bounds().centerY();
-  // log("模拟第一件商品的坐标:[" + activeItemX + "," + activeItemY + "]");
-  // log(
-  //   "推测商品选中框的坐标:[" +
-  //     (activeItemX - offsetX) +
-  //     "," +
-  //     (activeItemY - offsetY) +
-  //     "]"
-  // );
 
   for (var i = 0; i < allItems.length; i++) {
     var tempItem = allItems[i];
@@ -551,24 +487,8 @@ function findActiveItems() {
       activeItems.push(tempItem);
       try {
         log("INFO: 可购买商品信息: " + getItemInfo(tempItem));
-        // if (i == 0) {
-        //   let activeItemX = tempItem.bounds().centerX();
-        //   let activeItemY = tempItem.bounds().centerY();
-        //   log("第一件可买商品的坐标:[" + activeItemX + "," + activeItemY + "]");
-        //   log(
-        //     "INFO 点击第一件可买商品选中框的坐标:[" +
-        //       (activeItemX - offsetX) +
-        //       "," +
-        //       (activeItemY - offsetY) +
-        //       "]"
-        //   );
-        //   log("WARN: 临时关闭了点击商品功能");
-        //   // 因为不在可见范围, 所以无法点击
-        //   // click(activeItemX - offsetX, activeItemY - offsetY);
-        //   commonWait();
-        // }
       } catch (e) {
-        log(e);
+        console.error(e.stack);
       }
     }
   }
@@ -586,13 +506,13 @@ function doInItemSel() {
   ).findOne(5000);
   //console.timeEnd('商品列表页,确认状态耗时')
   if (specialPackageTxt) {
-    log("判断条件:" + specialPackageTxt.text());
+    log("进入条件2:" + specialPackageTxt.text());
     // 遍历所有的商品及计算偏移量
     printAllItems();
     //log("当前在营业时间");
     // 判断是否 运力已满
     console.time("确认是否可下单 耗时");
-    let btn = textMatches(/(立即下单|运力已约满)/).findOne(5000); // 大概 3500ms
+    let btn = textMatches(/(立即下单|运力已约满)/).findOne(5000); // S8大概 3500ms
     console.timeEnd("确认是否可下单 耗时");
     // musicNotify
     if (btn != null && btn.text() == "立即下单") {
@@ -611,9 +531,9 @@ function doInItemSel() {
             try {
               log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
               first.click();
-              // commonWait();
+              commonWait();
             } catch (e) {
-              log(e);
+              console.error(e.stack);
             }
           } else {
             // 播放有货的提示
@@ -626,38 +546,48 @@ function doInItemSel() {
             }
             commonWait();
           }
-          // TODO
         } else {
           log("当前商品情况:" + checkedTxt.text());
         }
 
         let submitBtn = text("立即下单").findOne(1000);
         if (submitBtn) {
-          submitBtn.click();
-          console.time("into_confirm_order 耗时");
-          // 高峰期会出现 [确定] 按钮
-          let confirmTxt =
-            textMatches(/(确认订单|确定|当前购物高峰期.*)/).findOne(10000);
-          console.timeEnd("into_confirm_order 耗时");
-          if (confirmTxt) {
-            console.log(
-              "下单后成功进入[确认订单|确定|当前购物高峰期]页面:" +
-                (confirmTxt != null)
-            );
-            if (confirmTxt.text() == "确定") {
-              console.log("返回[确定]按钮, 点击后马上重试");
-              clickByCoor(confirmTxt);
-            } else {
-              // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
+          // TODO , 这里是高峰期的核心操作
+          // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
+          // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
+          try {
+            while (submitBtn) {
+              submitBtn.click();
+              console.time("into_confirm_order 耗时");
+              // 高峰期会出现 [确定] 按钮
+              let confirmTxt =
+                textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(10000);
+              console.timeEnd("into_confirm_order 耗时");
+              if (confirmTxt) {
+                console.log("点击[立即下单]后,进入条件3:" + confirmTxt.text());
+                if (confirmTxt.text() == "确定") {
+                  console.log("发现[确定]按钮, 立即点击");
+                  clickByCoor(confirmTxt);
+                } else {
+                  // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
+                }
+              } else {
+                console.error("ERROR7: 既没有[确认订单], 也没有[确定]按钮");
+                musicNotify("09.error");
+              }
+              submitBtn = text("立即下单").findOne(100);
             }
-          } else {
-            console.error("ERROR: 既没有出现[确认订单], 也没有出现[确定]按钮");
+            log("[立即下单]已经往下流转");
+          } catch (e) {
+            console.error(e.stack);
           }
         } else {
-          console.error("没有找到[立即下单]按钮");
+          console.error("ERROR8: 没有找到[立即下单]按钮");
+          musicNotify("09.error");
         }
       } else {
-        console.error("异常情况, 没有找到[已选*件]文本");
+        console.error("异常情况6, 没有找到[已选*件]文本");
+        musicNotify("09.error");
       }
     } else {
       log("没有找到[立即下单], 即将返回首页");
@@ -697,7 +627,7 @@ function doInHome() {
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = text("小区提货点").findOne(10000); // 加载耗时3.3s
+    let mall = text("小区提货点").findOne(10000); // S8 加载耗时3.3s
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
