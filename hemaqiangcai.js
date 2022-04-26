@@ -81,7 +81,7 @@ function start() {
   click_i_know();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
     let page = textMatches(
-      /(我知道了|确定|搜索|小区提货点|确认订单|支付成功)/
+      /(我知道了|确定|搜索|小区提货点|确认订单)/
     ).findOne(5000);
 
     if (page) {
@@ -94,8 +94,6 @@ function start() {
       } else if (page.text() == "确认订单") {
         // 提交订单
         doInSubmit();
-      } else if (page.text() == "支付成功") {
-        paySuccess();
       } else if (page.text() == "我知道了") {
         // 系统提示, 点掉即可
         click_i_know();
@@ -111,7 +109,16 @@ function start() {
         commonWait();
       }
     } else {
-      console.error("ERROR: 未知页面");
+      let page2 = descMatches(/(支付成功)/).findOne(3000);
+      if (page2) {
+        if(page2.desc()=="支付成功"){
+          paySuccess();
+        }
+      } else {
+        console.error("ERROR: 无法判断当前在哪个页面");
+        musicNotify("09.error");
+        sleep(1000);
+      }
     }
 
     // 太容易阻碍操作了
@@ -486,12 +493,23 @@ function orderConfirm() {
       back();
       commonWait();
     } else {
-      musicNotify("02.pay");
-      let confirmBtn = text("提交订单").findOne(5000);
-      log("INFO: 点击[" + confirmBtn.text() + "]");
-      confirmBtn.click();
-      commonWait();
-      click_i_know();
+      let confirmBtn = text("提交订单|确认付款").findOne(5000);
+      if (confirmBtn) {
+        musicNotify("02.pay");
+        if (confirmBtn.text() == "提交订单") {
+          log("INFO: 点击[" + confirmBtn.text() + "]");
+          confirmBtn.click();
+          commonWait();
+          click_i_know();
+        } else {
+          // 等待用户付款
+          log("等待用户手工付款");
+          sleep(3000);
+        }
+      } else {
+        console.error("未知情况");
+        musicNotify("09.error");
+      }
     }
   } else {
     console.error("ERROR 没有找到金额");
