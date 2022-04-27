@@ -79,9 +79,9 @@ function start() {
   launchApp(APP_NAME);
   commonWait();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
-    let page = textMatches(/(我知道了|确定|搜索|小区提货点|确认订单)/).findOne(
-      5000
-    );
+    let page = textMatches(
+      /(.*请稍后重试.*|确定|搜索|小区提货点|确认订单)/
+    ).findOne(5000);
 
     if (page) {
       log("进入条件1:[" + page.text() + "]");
@@ -96,13 +96,18 @@ function start() {
         // 选择时间
         // 确认支付
         doInSubmit();
-      } else if (page.text() == "我知道了") {
-        // 系统提示, 点掉即可 (220426 盒马里面好像并没有这个按钮)
-        click_i_know();
+        // } else if (page.text() == "我知道了") {
+        //   // 系统提示, 点掉即可 (220426 盒马里面好像并没有这个按钮)
+        //   click_i_know();
       } else if (page.text() == "确定") {
         // 系统提示, 点掉即可
         click_i_know();
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
+        back();
+        commonWait();
+      } else if (page.text().indexOf("请稍后重试") != -1) {
+        // 当前购物高峰期人数较多, 请稍后重试
+        log("通过text查找到[%s]", page.text());
         back();
         commonWait();
       } else {
@@ -111,10 +116,14 @@ function start() {
         sleep(1000);
       }
     } else {
-      let page2 = descMatches(/(支付成功)/).findOne(3000);
+      let page2 = descMatches(/(支付成功|.*请稍后重试.*)/).findOne(3000);
       if (page2) {
         if (page2.desc() == "支付成功") {
           paySuccess();
+        } else if (page2.desc().indexOf("请稍后重试") != -1) {
+          log("通过desc查找到[%s]", page2.desc());
+          back();
+          commonWait();
         }
       } else {
         console.error("ERROR2: 无法判断当前在哪个页面");
@@ -420,7 +429,7 @@ function doInSubmit() {
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   let selectTimeBtn = textMatches(
     "(确认付款|.*前送达|选择时间|￥0.00)"
-  ).findOne(3000);
+  ).findOne(2000);
   // 通过选择时间按钮, 判断是否还有货
   if (selectTimeBtn) {
     if (selectTimeBtn.text() == "选择时间") {
@@ -449,8 +458,8 @@ function doInSubmit() {
       orderConfirm();
     }
   } else {
-    console.error("ERROR4 未知情况, 继续");
-    musicNotify("09.error");
+    console.error("ERROR4 在[确认订单]找不到任何内容, 继续");
+    // musicNotify("09.error");
     // 有时候在点了[确定]按钮之后, 在[确认订单]页面会卡住, 白屏
     // 返回购物车处理
     back();
@@ -479,7 +488,9 @@ function orderConfirm() {
       log("当前订单总金额:" + totalAmount.text());
       back();
       commonWait();
+      commonWait();
       back();
+      commonWait();
       commonWait();
     } else {
       let confirmBtn = text("提交订单|确认付款").findOne(5000);
@@ -490,6 +501,9 @@ function orderConfirm() {
           confirmBtn.click();
           commonWait();
           click_i_know();
+          // 提交订单页面的 确定 提示, 点击以后不会自动返回
+          back();
+          commonWait();
         } else {
           // 确认付款
           payConfirm();
@@ -638,9 +652,7 @@ function doInItemSel() {
                 console.time("into_confirm_order 耗时");
                 // 高峰期会出现 [确定] 按钮
                 let confirmTxt =
-                  textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(
-                    10000
-                  );
+                  textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(5000);
                 console.timeEnd("into_confirm_order 耗时");
                 if (confirmTxt) {
                   console.log(
@@ -731,13 +743,10 @@ function commonWait() {
 
 function click_i_know() {
   // 只要页面有 我知道了等按钮, 都盲点
-  let retry_button = textMatches(/(我知道了|返回购物车|确定)/);
-  if (retry_button.exists()) {
-    let temp = retry_button.findOne(100);
-    if (temp != null) {
-      log("通用方法:找到[" + temp.text() + "]按钮,直接点击");
-      clickByCoor(temp);
-    }
+  let retry_button = textMatches(/(我知道了|返回购物车|确定)/).findOne(100);
+  if (retry_button) {
+    log("通用方法:找到[" + retry_button.text() + "]按钮,直接点击");
+    clickByCoor(retry_button);
   }
 }
 
