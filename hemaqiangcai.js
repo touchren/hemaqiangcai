@@ -31,7 +31,7 @@ var buyMode = 1;
 
 // 过滤商品的正则表示式 .+ 表示所有商品
 // var itemFilterStr = ".+";
-// var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
+//var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
 // 每日鲜语|
 var itemFilterStr =
   ".*(工坊大红肠300g|0添加酸奶原味|卫生巾日用|一次性手套|肋排条|五香牛腱|虾仁).*";
@@ -80,7 +80,7 @@ function start() {
   commonWait();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
     let page = textMatches(
-      /(.*请稍后重试.*|确定|搜索|小区提货点|确认订单)/
+      /(.*请稍后重试.*|确定|搜索|小区提货点|确认订单|订单详情)/
     ).findOne(5000);
 
     if (page) {
@@ -110,6 +110,9 @@ function start() {
         log("通过text查找到[%s]", page.text());
         back();
         commonWait();
+      } else if (page.text() == "订单详情") {
+        log("等待用户进行操作");
+        sleep(5000);
       } else {
         console.error("ERROR1: 当前在其他页面");
         musicNotify("09.error");
@@ -194,12 +197,13 @@ function musicNotify(name) {
 function printAllItems() {
   if (!hasFindAllItems) {
     let totalItemsStr = "";
+    let needItemsStr = "";
     let itemIdx = 0;
     let items = className("android.view.View")
       .depth(18)
       .textMatches(/(.+)/)
       .find();
-    log("INFO allItems.size():" + items.size());
+    console.info("INFO allItems.size():" + items.size());
     for (let v of items) {
       itemIdx++;
       if (itemIdx == 1) {
@@ -211,9 +215,15 @@ function printAllItems() {
         log("第一个商品选项框坐标: " + item1.bounds());
         hasFindAllItems = true;
       }
-      totalItemsStr = totalItemsStr + itemIdx + ":" + getItemInfo(v) + "; ";
+      let itemInfo = getItemInfo(v);
+      totalItemsStr = totalItemsStr + itemIdx + ":" + itemInfo + "; ";
+      if (v.text().match(itemFilterStr)) {
+        needItemsStr = needItemsStr + itemIdx + ":" + itemInfo + "; ";
+      }
     }
-    log(totalItemsStr);
+    log("全部商品列表: %s", totalItemsStr);
+    log("##########################");
+    log("需要的商品列表: %s", needItemsStr);
   }
 }
 
@@ -222,7 +232,7 @@ function listAllItems() {
     .depth(18)
     .textMatches(itemFilterStr)
     .find();
-  toastLog("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
+  log("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
   return items;
 }
 
@@ -245,7 +255,7 @@ function filterActiveItem(item) {
   });
 
   // if (isActive) {
-  //   log("INFO 确认商品[" + item.text() + "]可购买");
+  //   console.info("INFO 确认商品[" + item.text() + "]可购买");
   // }
   return isActive;
 }
@@ -269,7 +279,7 @@ function filterActiveItemByRadio(itemRadio) {
   });
 
   // if (isActive) {
-  //   log("INFO 确认商品[" + item.text() + "]可购买");
+  //   console.info("INFO 确认商品[" + item.text() + "]可购买");
   // }
   return isActive;
 }
@@ -316,16 +326,14 @@ function getItemInfo(v) {
   // idx 3: 整数金额
   // idx 4: 小数金额 (可能没有)
   // idx 5: 单位 (可能是4)
-  if (infoList.size() >= 6) {
+  if (infoList.size() == 6) {
     // 价格有小数的情况
     return (
       infoList.get(0).text() +
       "-" +
       infoList.get(3).text() +
       infoList.get(4).text() +
-      infoList.get(infoList.size() - 1).text() +
-      "-" +
-      infoList.size()
+      infoList.get(infoList.size() - 1).text()
     );
   } else if (infoList.size() == 5) {
     // 价格是整数, 有描述的情况
@@ -337,9 +345,7 @@ function getItemInfo(v) {
         "-" +
         infoList.get(3).text() +
         ".0" +
-        infoList.get(infoList.size() - 1).text() +
-        "-" +
-        infoList.size()
+        infoList.get(infoList.size() - 1).text()
       );
     } else {
       // 没有描述, 有小数
@@ -469,56 +475,80 @@ function doInSubmit() {
 }
 
 function orderConfirm() {
-  log("进入[确认订单]第二部分")
+  log("进入[确认订单]第二部分");
+  let addressIsOK = false;
+  // 220427 地址会为空, 前面两项会自动根据淘宝账号带出
   className("android.widget.EditText")
     .focusable()
     .clickable()
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
-      if (child.text() == null || child.text() == "" || child.text() == "例：8号楼808室") {
-        toastLog("请手工输入第" + (idx + 1) + "项内容");
-        sleep(3000);
-      }
-    });
-
-  let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(2000);
-  if (totalAmount) {
-    log("金额:" + totalAmount.text());
-    if (totalAmount.text() == "￥0.00") {
-      // 这种情况一般就是有缓存了, 光退回团购页面还不行, 需要返回首页
-      log("当前订单总金额:" + totalAmount.text());
-      back();
-      commonWait();
-      commonWait();
-      back();
-      commonWait();
-      commonWait();
-    } else {
-      let confirmBtn = text("提交订单|确认付款").findOne(2000);
-      if (confirmBtn) {
-        musicNotify("02.pay");
-        if (confirmBtn.text() == "提交订单") {
-          log("INFO: 点击[" + confirmBtn.text() + "]");
-          confirmBtn.click();
-          commonWait();
-          click_i_know();
-          // 提交订单页面的 确定 提示, 点击以后不会自动返回
+      if (idx == 2) {
+        if (
+          child.text() == null ||
+          child.text() == "" ||
+          child.text() == "例：8号楼808室"
+        ) {
+          //toastLog("请手工输入第" + (idx + 1) + "项内容");
+          //sleep(3000);
+          log("选中地址输入框");
+          clickByCoor(child);
+          log("粘贴剪贴板内容");
+          child.paste();
+          sleep(50);
+          log("点击返回, 关闭输入框");
           back();
           commonWait();
+          // 不确定功能是否正确, 人工介入配合
+          sleep(10 * 1000);
         } else {
-          // 确认付款
-          payConfirm();
+          toastLog("当前地址为:[%s]", child.text());
+          //addressIsOK;
         }
-      } else {
-        // 在输入信息的时候会挡住按钮
-        console.error("ERROR5 未知情况");
-        musicNotify("09.error");
       }
+    });
+  if (addressIsOK) {
+    let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(2000);
+    if (totalAmount) {
+      log("金额:" + totalAmount.text());
+      if (totalAmount.text() == "￥0.00") {
+        // 这种情况一般就是有缓存了, 光退回团购页面还不行, 需要返回首页
+        log("当前订单总金额:" + totalAmount.text());
+        back();
+        commonWait();
+        commonWait();
+        back();
+        commonWait();
+        commonWait();
+      } else {
+        let confirmBtn = text("提交订单|确认付款").findOne(2000);
+        if (confirmBtn) {
+          musicNotify("02.pay");
+          if (confirmBtn.text() == "提交订单") {
+            console.info("INFO: 点击[" + confirmBtn.text() + "]");
+            confirmBtn.click();
+            commonWait();
+            click_i_know();
+            // 提交订单页面的 确定 提示, 点击以后不会自动返回
+            back();
+            commonWait();
+          } else {
+            // 确认付款
+            payConfirm();
+          }
+        } else {
+          // 在输入信息的时候会挡住按钮
+          console.error("ERROR5 未知情况");
+          musicNotify("09.error");
+        }
+      }
+    } else {
+      console.error("ERROR6 没有找到金额");
+      musicNotify("09.error");
     }
   } else {
-    console.error("ERROR6 没有找到金额");
-    musicNotify("09.error");
+    log("收货地址未输入, 稍后重试");
   }
 }
 
@@ -548,7 +578,7 @@ function findActiveItems() {
     if (filterActiveItem(tempItem)) {
       activeItems.push(tempItem);
       try {
-        log("INFO: 可购买商品信息: " + getItemInfo(tempItem));
+        console.info("INFO: 可购买商品信息: " + getItemInfo(tempItem));
       } catch (e) {
         console.error(e.stack);
       }
@@ -578,7 +608,7 @@ function doInItemSel() {
     console.timeEnd("确认是否可下单 耗时");
     // musicNotify
     if (btn != null && btn.text() == "立即下单") {
-      log("INFO: 开始选择商品");
+      console.info("INFO: 开始选择商品");
       // 默认是 [已选0件]
       let checkedTxt = textStartsWith("已选").findOne(1000);
       // log(checkedTxt);
@@ -589,14 +619,16 @@ function doInItemSel() {
           // TODO 1, 首先获取所有符合条件的商品
           let activeItems = findActiveItems();
           if (activeItems.length == 0) {
-            log("INFO 没有符合条件的可选商品, 下单第一件");
             let first = findFirstItem();
             try {
-              log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
+              console.info(
+                "INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first)
+              );
               if (filterActiveItem(first)) {
                 // 0 或者 1, 自动选择
                 // 其他, 不选择
                 if (buyMode == 0 || buyMode == 1) {
+                  toastLog("INFO 没有符合条件的可选商品, 下单第一件");
                   clickRadioByItem(first);
                   isItemSelectd = true;
                 } else {
@@ -615,7 +647,7 @@ function doInItemSel() {
           } else {
             // 播放有货的提示
             musicNotify("11.hippo_active");
-            log("INFO 找到符合条件的商品, 选中商品");
+            console.info("INFO 找到符合条件的商品, 选中商品");
             for (let i = 0; i < activeItems.length; i++) {
               // 0, 全选所有商品
               // 1, 仅选择第一件商品
@@ -625,13 +657,13 @@ function doInItemSel() {
                 toastLog("等待用户手工选择1,1秒后尝试[立即下单]");
                 sleep(1000);
               } else if (buyMode == 0 || (buyMode == 1 && i == 0)) {
-                log(
+                toastLog(
                   "INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]"
                 );
                 clickRadioByItem(item);
                 isItemSelectd = true;
               } else {
-                log(
+                console.info(
                   "INFO 跳过第[" + (i + 1) + "]件商品: [" + item.text() + "]"
                 );
               }
