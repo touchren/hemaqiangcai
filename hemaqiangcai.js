@@ -469,13 +469,14 @@ function doInSubmit() {
 }
 
 function orderConfirm() {
+  log("进入[确认订单]第二部分")
   className("android.widget.EditText")
     .focusable()
     .clickable()
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
-      if (child.text() == null || child.text() == "") {
+      if (child.text() == null || child.text() == "" || child.text() == "例：8号楼808室") {
         toastLog("请手工输入第" + (idx + 1) + "项内容");
         sleep(3000);
       }
@@ -494,7 +495,7 @@ function orderConfirm() {
       commonWait();
       commonWait();
     } else {
-      let confirmBtn = text("提交订单|确认付款").findOne(5000);
+      let confirmBtn = text("提交订单|确认付款").findOne(2000);
       if (confirmBtn) {
         musicNotify("02.pay");
         if (confirmBtn.text() == "提交订单") {
@@ -510,6 +511,7 @@ function orderConfirm() {
           payConfirm();
         }
       } else {
+        // 在输入信息的时候会挡住按钮
         console.error("ERROR5 未知情况");
         musicNotify("09.error");
       }
