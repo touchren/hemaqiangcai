@@ -23,9 +23,11 @@ var isSuccessed = false;
 // 遍历所有商品
 var hasFindAllItems = false;
 
-// 商品下单逻辑 (暂未启用)
-// 0 优先抢符合条件的商品, 如果都没有则抢第一件商品
-var buyMode = 0;
+// 自动选择商品逻辑
+// 0 全选所有符合条件的商品, 如果都没有则抢第一件商品
+// 1 在mode 0的基础上, 仅抢第一件商品(包含不符合条件的)
+// 除了0,1外 不自动选择商品, 停留在商品选择页面, 人工选择商品后自动提交
+var buyMode = 1;
 
 // 过滤商品的正则表示式 .+ 表示所有商品
 // var itemFilterStr = ".+";
@@ -55,9 +57,11 @@ while (round < MAX_ROUND) {
   try {
     start();
   } catch (e) {
+    // 在sleep的过程中, 按 [音量+] 停止脚本, 这里也会报错
+    console.error(e);
     console.error("ERROR0: 出现中断性问题", e.stack);
+    sleep(3000);
     musicNotify("09.error");
-    //console.error(e.stack);
   }
   let randomSleep = random(30 * 1000, 90 * 1000);
   toastLog("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
@@ -209,13 +213,37 @@ function listAllItems() {
     .depth(18)
     .textMatches(itemFilterStr)
     .find();
-  log("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
+  toastLog("符合条件[" + itemFilterStr + "]的商品数:" + items.size());
   return items;
 }
 
 function filterActiveItem(item) {
   let isActive = true;
   let itemDiv = item.parent().parent().parent().parent();
+  // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+  // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
+  itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
+    // log("子信息项"+idx+":" + temp);
+    if (
+      temp.text() ==
+        "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_" ||
+      temp.text() ==
+        "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
+    ) {
+      isActive = false;
+      // log("确认商品[" + item.text() + "]无运力或今日售完");
+    }
+  });
+
+  // if (isActive) {
+  //   log("INFO 确认商品[" + item.text() + "]可购买");
+  // }
+  return isActive;
+}
+
+function filterActiveItemByRadio(itemRadio) {
+  let isActive = true;
+  let itemDiv = itemRadio.parent().parent().parent().parent();
   // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
   // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
   itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
@@ -257,7 +285,7 @@ function clickRadioByItem(item) {
     // sleep(10000);
   });
   let checkBtn = checkBtns[0];
-  log("点击" + item.text() + "的选项框");
+  log("点击[" + item.text() + "]的选项框");
   checkBtn.click();
   // 因为商品选中这个操作并不会与后台接口交互数据, 所以特别的, 这里并不设置等待
 }
@@ -328,7 +356,6 @@ function getItemInfo(v) {
  */
 function getItemInfoByRadio(v) {
   let infoDiv = v.parent().parent();
-  log("each2");
   let infoList = infoDiv
     .find(textMatches(".+"))
     .find(className("android.view.View"))
@@ -352,10 +379,21 @@ function getItemInfoByRadio(v) {
  * 获取第一个商品的选项框
  * @returns
  */
+// function findFirstItemRadio() {
+//   let item1 = className("android.view.View")
+//     .depth(16)
+//     .clickable(true)
+//     .findOne(10000);
+//   return item1;
+// }
+
+/**
+ * 获得第一个商品的标题位置UIObject
+ */
 function findFirstItem() {
   let item1 = className("android.view.View")
-    .depth(16)
-    .clickable(true)
+    .depth(18)
+    .textMatches(/(.+)/)
     .findOne(10000);
   return item1;
 }
@@ -413,6 +451,10 @@ function doInSubmit() {
   } else {
     console.error("ERROR4 未知情况, 继续");
     musicNotify("09.error");
+    // 有时候在点了[确定]按钮之后, 在[确认订单]页面会卡住, 白屏
+    // 返回购物车处理
+    back();
+    commonWait();
   }
 }
 
@@ -521,69 +563,110 @@ function doInItemSel() {
       let checkedTxt = textStartsWith("已选").findOne(1000);
       // log(checkedTxt);
       if (checkedTxt) {
+        // 商品已选中
+        let isItemSelectd = false;
         if (checkedTxt.text() == "已选0件") {
           // TODO 1, 首先获取所有符合条件的商品
           let activeItems = findActiveItems();
           if (activeItems.length == 0) {
             log("INFO 没有符合条件的可选商品, 下单第一件");
-            // TODO 3, 没有符合条件商品的情况下, 下单第一件商品
             let first = findFirstItem();
             try {
               log("INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first));
-              first.click();
-              commonWait();
+              if (filterActiveItem(first)) {
+                // 0 或者 1, 自动选择
+                // 其他, 不选择
+                if (buyMode == 0 || buyMode == 1) {
+                  clickRadioByItem(item);
+                  isItemSelectd = true;
+                } else {
+                  console.log("等待用户手工选择2,1秒后尝试[立即下单]");
+                  sleep(1000);
+                }
+              } else {
+                // 不可购买的话, 返回首页, 重试
+                console.warn("WARN: 商品[" + first.text() + "]当前不可购买");
+                back();
+                commonWait();
+              }
             } catch (e) {
               console.error(e.stack);
             }
           } else {
             // 播放有货的提示
             musicNotify("11.hippo_active");
-            // TODO 2, 依次选中
-            log("INFO 找到符合条件的商品, 选中所有商品");
-            for (item of activeItems) {
-              log("INFO 开始选中:" + item.text());
-              clickRadioByItem(item);
+            log("INFO 找到符合条件的商品, 选中商品");
+            for (let i = 0; i < activeItems.length; i++) {
+              // 0, 全选所有商品
+              // 1, 仅选择第一件商品
+              // 其他 不选择
+              if (buyMode != 0 && buyMode != 1) {
+                console.log("等待用户手工选择1,1秒后尝试[立即下单]");
+                sleep(1000);
+              } else if (buyMode == 0 || (buyMode == 1 && i == 0)) {
+                item = activeItems[i];
+                log("INFO 开始选中:" + item.text());
+                clickRadioByItem(item);
+                isItemSelectd = true;
+              } else {
+                log(
+                  "INFO 不选中第[" + (i + 1) + "]件商品: [" + item.text() + "]"
+                );
+              }
             }
             commonWait();
           }
         } else {
           log("当前商品情况:" + checkedTxt.text());
+          isItemSelectd = true;
         }
 
-        let submitBtn = text("立即下单").findOne(1000);
-        if (submitBtn) {
-          // TODO , 这里是高峰期的核心操作
-          // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
-          // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
-          try {
-            while (submitBtn) {
-              submitBtn.click();
-              console.time("into_confirm_order 耗时");
-              // 高峰期会出现 [确定] 按钮
-              let confirmTxt =
-                textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(10000);
-              console.timeEnd("into_confirm_order 耗时");
-              if (confirmTxt) {
-                console.log("点击[立即下单]后,进入条件3:" + confirmTxt.text());
-                if (confirmTxt.text() == "确定") {
-                  console.log("发现[确定]按钮, 立即点击");
-                  clickByCoor(confirmTxt);
+        if (isItemSelectd) {
+          let submitBtn = text("立即下单").findOne(1000);
+          if (submitBtn) {
+            // TODO , 这里是高峰期的核心操作
+            // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
+            // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
+            try {
+              while (submitBtn) {
+                submitBtn.click();
+                console.time("into_confirm_order 耗时");
+                // 高峰期会出现 [确定] 按钮
+                let confirmTxt =
+                  textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(
+                    10000
+                  );
+                console.timeEnd("into_confirm_order 耗时");
+                if (confirmTxt) {
+                  console.log(
+                    "点击[立即下单]后,进入条件3:" + confirmTxt.text()
+                  );
+                  if (confirmTxt.text() == "确定") {
+                    console.log("发现[确定]按钮, 立即点击");
+                    clickByCoor(confirmTxt);
+                    back();
+                    commonWait();
+                  } else {
+                    // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
+                  }
                 } else {
-                  // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
+                  console.error("ERROR7: 既没有[确认订单], 也没有[确定]按钮");
+                  musicNotify("09.error");
+                  back();
+                  commonWait();
                 }
-              } else {
-                console.error("ERROR7: 既没有[确认订单], 也没有[确定]按钮");
-                musicNotify("09.error");
+                submitBtn = text("立即下单").findOne(100);
               }
-              submitBtn = text("立即下单").findOne(100);
+              log("[立即下单]已经往下流转");
+            } catch (e) {
+              console.error(e.stack);
             }
-            log("[立即下单]已经往下流转");
-          } catch (e) {
-            console.error(e.stack);
+          } else {
+            console.error("ERROR8: 没有找到[立即下单]按钮");
+            musicNotify("09.error");
           }
         } else {
-          console.error("ERROR8: 没有找到[立即下单]按钮");
-          musicNotify("09.error");
+          console.log("等待选择商品");
         }
       } else {
         console.error("异常情况6, 没有找到[已选*件]文本");
