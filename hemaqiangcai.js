@@ -465,7 +465,10 @@ function orderConfirm() {
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
-      // input(2, RECEIPT_ADDRESS);
+      if (child.text() == null || child.text() == "") {
+        toastLog("请手工输入第" + (idx + 1) + "项内容");
+        sleep(3000);
+      }
     });
 
   let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(2000);
@@ -512,7 +515,7 @@ function payConfirm() {
     // 标记为成功
     isSuccessed = true;
     // 等待用户付款
-    log("等待用户手工付款");
+    toastLog("等待用户手工付款");
     sleep(3000);
     //musicNotify();
   }
@@ -580,7 +583,7 @@ function doInItemSel() {
                   clickRadioByItem(item);
                   isItemSelectd = true;
                 } else {
-                  console.log("等待用户手工选择2,1秒后尝试[立即下单]");
+                  toastLog("等待用户手工选择2,1秒后尝试[立即下单]");
                   sleep(1000);
                 }
               } else {
@@ -600,17 +603,19 @@ function doInItemSel() {
               // 0, 全选所有商品
               // 1, 仅选择第一件商品
               // 其他 不选择
+              item = activeItems[i];
               if (buyMode != 0 && buyMode != 1) {
-                console.log("等待用户手工选择1,1秒后尝试[立即下单]");
+                toastLog("等待用户手工选择1,1秒后尝试[立即下单]");
                 sleep(1000);
               } else if (buyMode == 0 || (buyMode == 1 && i == 0)) {
-                item = activeItems[i];
-                log("INFO 开始选中:" + item.text());
+                log(
+                  "INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]"
+                );
                 clickRadioByItem(item);
                 isItemSelectd = true;
               } else {
                 log(
-                  "INFO 不选中第[" + (i + 1) + "]件商品: [" + item.text() + "]"
+                  "INFO 跳过第[" + (i + 1) + "]件商品: [" + item.text() + "]"
                 );
               }
             }
