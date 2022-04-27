@@ -428,10 +428,11 @@ function doInSubmit() {
   musicNotify("01.submit");
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   let selectTimeBtn = textMatches(
-    "(确认付款|.*前送达|选择时间|￥0.00)"
+    "(￥0.00|.*前送达|选择时间|确认付款)"
   ).findOne(2000);
   // 通过选择时间按钮, 判断是否还有货
   if (selectTimeBtn) {
+    log("进入条件4: [%s]", selectTimeBtn.text());
     if (selectTimeBtn.text() == "选择时间") {
       // log(selectTimeBtn);
       log("点击->[" + selectTimeBtn.text() + "]");
@@ -594,7 +595,7 @@ function doInItemSel() {
                 // 0 或者 1, 自动选择
                 // 其他, 不选择
                 if (buyMode == 0 || buyMode == 1) {
-                  clickRadioByItem(item);
+                  clickRadioByItem(first);
                   isItemSelectd = true;
                 } else {
                   toastLog("等待用户手工选择2,1秒后尝试[立即下单]");
