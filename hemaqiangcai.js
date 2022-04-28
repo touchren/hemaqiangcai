@@ -38,6 +38,7 @@ var itemFilterStr =
 // 任务中断次数
 var interruptCount = 0;
 
+// [立即下单] 和 [提交订单] 的 中心坐标都与对方重叠, 填写 门牌号 的时候, 会获取不到 [提交订单] 对象, 使用[立即下单] 替代
 var submitOrderX;
 var submitOrderY;
 
@@ -551,9 +552,6 @@ function orderConfirm() {
         if (confirmBtn) {
           musicNotify("02.pay");
           if (confirmBtn.text() == "提交订单") {
-            // TODO 记录 提交订单的坐标
-            submitOrderX = confirmBtn.loc().centerX();
-            submitOrderY = confirmBtn.loc().centerY();
             console.info("INFO: 点击[" + confirmBtn.text() + "]");
             confirmBtn.click();
             commonWait();
@@ -717,6 +715,9 @@ function doInItemSel() {
       console.timeEnd("确认是否可下单 耗时");
       // musicNotify
       if (btn != null && btn.text() == "立即下单") {
+        // 记录 [立即下单]的坐标
+        submitOrderX = btn.loc().centerX();
+        submitOrderY = btn.loc().centerY();
         // 默认是 [已选0件]
         let checkedTxt = textStartsWith("已选").findOne(1000);
         // log(checkedTxt);
