@@ -38,6 +38,9 @@ var itemFilterStr =
 // 任务中断次数
 var interruptCount = 0;
 
+var submitOrderX;
+var submitOrderY;
+
 // 调试期间临时使用, 关闭其他脚本
 engines.all().map((ScriptEngine) => {
   log("engines.myEngine().toString():" + engines.myEngine().toString());
@@ -63,7 +66,7 @@ while (round < MAX_ROUND) {
     sleep(3000);
     musicNotify("09.error");
   }
-  let randomSleep = random(30 * 1000, 90 * 1000);
+  let randomSleep = random(10 * 1000, 50 * 1000);
   toastLog("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
   sleep(randomSleep);
 }
@@ -80,7 +83,7 @@ function start() {
   commonWait();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
     let page = textMatches(
-      /(.*请稍后重试.*|确定|搜索|小区提货点|确认订单|订单详情)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|订单详情)/
     ).findOne(5000);
 
     if (page) {
@@ -110,6 +113,11 @@ function start() {
         log("通过text查找到[%s]", page.text());
         back();
         commonWait();
+      } else if (page.text().indexOf("完成验证") != -1) {
+        // 当前购物高峰期人数较多, 请稍后重试
+        log("通过text查找到[%s]", page.text());
+        musicNotify("05.need_manual");
+        sleep(3000);
       } else if (page.text() == "订单详情") {
         log("等待用户进行操作");
         sleep(5000);
@@ -434,7 +442,7 @@ function doInSubmit() {
   musicNotify("01.submit");
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   let selectTimeBtn = textMatches(
-    "(￥0.00|.*前送达|选择时间|确认付款)"
+    "(￥0.00|.*前送达|选择时间|确认付款|.*滑块完成验证.*)"
   ).findOne(2000);
   // 通过选择时间按钮, 判断是否还有货
   if (selectTimeBtn) {
@@ -460,6 +468,11 @@ function doInSubmit() {
       payConfirm();
     } else if (selectTimeBtn.text() == "￥0.00") {
       orderConfirm();
+    } else if (selectTimeBtn.text().indexOf("完成验证") != -1) {
+      // 当前购物高峰期人数较多, 请稍后重试
+      log("通过text查找到[%s]", page.text());
+      musicNotify("05.need_manual");
+      sleep(3000);
     } else {
       log("找到类似于[**前送达]的选择项");
       orderConfirm();
@@ -478,9 +491,10 @@ function orderConfirm() {
   log("进入[确认订单]第二部分");
   let addressIsError = false;
   // 220427 [门牌号] 会为空, 前面两项会自动根据淘宝账号带出
+  // TODO 需要验证移除条件后是否能查出地址
+  //  .focusable()
+  //  .clickable()
   className("android.widget.EditText")
-    .focusable()
-    .clickable()
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
@@ -501,17 +515,16 @@ function orderConfirm() {
           log("点击返回, 关闭输入框");
           back();
           commonWait();
-          // 不确定功能是否正确, 人工介入配合
-          sleep(10 * 1000);
+          // 220428, 测试粘贴剪贴板可以成功
           addressIsError = false;
         } else {
-          toastLog("当前地址为:[%s]", child.text());
+          log("当前地址为:[%s]", child.text());
           //addressIsError = false;
         }
       }
     });
   if (!addressIsError) {
-    let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(2000);
+    let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(1000);
     if (totalAmount) {
       log("金额:" + totalAmount.text());
       if (totalAmount.text() == "￥0.00") {
@@ -534,10 +547,13 @@ function orderConfirm() {
         back();
         commonWait();
       } else {
-        let confirmBtn = text("提交订单|确认付款").findOne(2000);
+        let confirmBtn = text("提交订单|确认付款").findOne(1000);
         if (confirmBtn) {
           musicNotify("02.pay");
           if (confirmBtn.text() == "提交订单") {
+            // TODO 记录 提交订单的坐标
+            submitOrderX = confirmBtn.loc().centerX();
+            submitOrderY = confirmBtn.loc().centerY();
             console.info("INFO: 点击[" + confirmBtn.text() + "]");
             confirmBtn.click();
             commonWait();
@@ -551,8 +567,19 @@ function orderConfirm() {
           }
         } else {
           // 在输入信息的时候会挡住按钮
+          if (submitOrderX && submitOrderY) {
+            log(
+              "直接点击[提交订单]对应的坐标[%s,%s]",
+              submitOrderX,
+              submitOrderY
+            );
+            click(submitOrderX, submitOrderY);
+          } else {
+            console.error("没有缓存到[提交订单]的坐标");
+          }
           console.error("ERROR5 未知情况");
           musicNotify("09.error");
+          commonWait();
         }
       }
     } else {
@@ -590,7 +617,7 @@ function findActiveItems() {
     if (filterActiveItem(tempItem)) {
       activeItems.push(tempItem);
       try {
-        console.info("INFO: 可购买商品信息: " + getItemInfo(tempItem));
+        console.info("INFO: 可购买商品信息: " + tempItem.text());
       } catch (e) {
         console.error(e.stack);
       }
@@ -607,47 +634,47 @@ function itemSel() {
   // 如果有运力的情况下, 第一个商品肯定可购买的, 售罄的商品会排在后面
   if (filterActiveItem(first)) {
     canBuy = true;
-    toastLog("INFO: 通过第一个商品判断出当前[可下单]");
-    // TODO 1, 首先获取所有符合条件的商品
+    toastLog("当前[可下单]");
+    // 1, 首先获取所有符合条件的商品
     let activeItems = findActiveItems();
     if (activeItems.length == 0) {
       try {
-        console.info(
-          "INFO: 通过选项框查找商品信息: " + getItemInfoByRadio(first)
-        );
-        if (filterActiveItem(first)) {
-          // 0 或者 1, 自动选择
-          // 其他, 不选择
-          if (buyMode == 0 || buyMode == 1) {
-            toastLog("INFO 没有符合条件的可选商品, 下单第一件");
-            clickRadioByItem(first);
-            isItemSelectd = true;
-          } else {
-            toastLog("等待用户手工选择2,1秒后尝试[立即下单]");
-            sleep(1000);
-          }
+        console.info("INFO: 第一件商品信息: " + first.text());
+        // if (filterActiveItem(first)) {
+        // 0 或者 1, 自动选择
+        // 其他, 不选择
+        if (buyMode == 0 || buyMode == 1) {
+          toastLog("INFO 没有符合条件的可选商品, 下单第一件");
+          clickRadioByItem(first);
+          isItemSelectd = true;
         } else {
-          // 不可购买的话, 返回首页, 重试
-          console.warn("WARN: 商品[" + first.text() + "]当前不可购买");
-          back();
-          commonWait();
+          toastLog("等待用户手工选择2,1秒后尝试[立即下单]");
+          sleep(1000);
         }
+        // } else {
+        //   // 不可购买的话, 返回首页, 重试
+        //   console.warn("WARN: 商品[" + first.text() + "]当前不可购买");
+        //   back();
+        //   commonWait();
+        // }
       } catch (e) {
         console.error(e.stack);
       }
     } else {
       console.info("INFO 找到符合条件的商品, 选中商品");
+      // 220428 随机选中某件可选商品
+      let randomIdx = random(0, activeItems.length - 1);
       for (let i = 0; i < activeItems.length; i++) {
         // 0, 全选所有商品
         // 1, 仅选择第一件商品
         // 其他 不选择
         item = activeItems[i];
         if (buyMode != 0 && buyMode != 1) {
-          // 播放有货的提示
-          musicNotify("11.hippo_active");
+          // 播放需要手工操作的提示
+          musicNotify("05.need_manual");
           toastLog("等待用户手工选择1,2秒后尝试[立即下单],建议直接下单");
           sleep(2000);
-        } else if (buyMode == 0 || (buyMode == 1 && i == 0)) {
+        } else if (buyMode == 0 || (buyMode == 1 && i == randomIdx)) {
           toastLog("INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]");
           clickRadioByItem(item);
           isItemSelectd = true;
@@ -681,9 +708,9 @@ function doInItemSel() {
     printAllItems();
     //log("当前在营业时间");
     // 220428 因为其实 [商品列表] 比 [立即下单] 按钮加载的更快, 考虑用第一个商品是否可购买来判断能否下单
-    console.time("判断第一个商品是否可买耗时:");
+    console.time("判断是否可买并选中耗时");
     let canBuy = itemSel();
-    console.timeEnd("判断第一个商品是否可买耗时:");
+    console.timeEnd("判断是否可买并选中耗时");
     if (canBuy) {
       console.time("确认是否可下单 耗时");
       let btn = textMatches(/(立即下单|运力已约满)/).findOne(4000); // S8大概 3500ms
@@ -699,7 +726,7 @@ function doInItemSel() {
 
             let submitBtn = text("立即下单").findOne(1000);
             if (submitBtn) {
-              // TODO , 这里是高峰期的核心操作
+              // 这里是高峰期的核心操作
               // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
               // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
               try {
@@ -707,20 +734,25 @@ function doInItemSel() {
                   submitBtn.click();
                   console.time("into_confirm_order 耗时");
                   // 高峰期会出现 [确定] 按钮
-                  let confirmTxt =
-                    textMatches(/(当前购物高峰期.*|确认订单|确定)/).findOne(
-                      5000
-                    );
+                  let confirmTxt = textMatches(
+                    /(当前购物高峰期.*|.*滑块完成验证.*|确认订单|确定)/
+                  ).findOne(5000);
                   console.timeEnd("into_confirm_order 耗时");
                   if (confirmTxt) {
                     console.log(
                       "点击[立即下单]后,进入条件3:" + confirmTxt.text()
                     );
                     if (confirmTxt.text() == "确定") {
+                      // [确认订单] - 温馨提示 - 前方拥挤, 亲稍等再试试 - [确定]
                       console.log("发现[确定]按钮, 立即点击");
                       clickByCoor(confirmTxt);
                       back();
                       commonWait();
+                    } else if (confirmTxt.text().indexOf("完成验证") != -1) {
+                      // 当前购物高峰期人数较多, 请稍后重试
+                      log("通过text查找到[%s]", page.text());
+                      musicNotify("05.need_manual");
+                      sleep(3000);
                     } else {
                       // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
                     }
@@ -773,7 +805,7 @@ function doInHome() {
   if (count == 1 || count % 5 == 0) {
     toast("抢菜第" + round + "轮第" + count + "次");
   }
-  log("当前在首页");
+  // log("当前在首页");
   // 在首页
   let toListBtn = id("home_page_other_layout").findOne(1000); // 20ms
   if (toListBtn) {
