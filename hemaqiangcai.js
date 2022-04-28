@@ -195,13 +195,24 @@ function musicNotify(name) {
     name = "success";
   }
   let m = "/storage/emulated/0/Download/" + name + ".mp3";
+  console.time("music[" + name + "] 耗时");
   try {
-    console.time("music[" + name + "] 耗时");
+    if (!files.exists(m)) {
+      // 如果无法访问, 大概耗时2.5s, 将来准备换成公网地址
+      var res = http.get(
+        "http://192.168.6.16/apk/autojs/tts/Download/" + name + ".mp3"
+      );
+      if (res.statusCode == 200) {
+        files.writeBytes(m, res.body.bytes());
+        log("%s下载完成", m);
+      }
+    }
+
     media.playMusic(m);
-    console.timeEnd("music[" + name + "] 耗时");
   } catch (e) {
     console.error("播放文件不存在:" + m, e);
   }
+  console.timeEnd("music[" + name + "] 耗时");
 }
 
 function printAllItems() {
