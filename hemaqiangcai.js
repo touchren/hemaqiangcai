@@ -716,8 +716,8 @@ function doInItemSel() {
       // musicNotify
       if (btn != null && btn.text() == "立即下单") {
         // 记录 [立即下单]的坐标
-        submitOrderX = btn.loc().centerX();
-        submitOrderY = btn.loc().centerY();
+        submitOrderX = btn.bounds().centerX();
+        submitOrderY = btn.bounds().centerY();
         // 默认是 [已选0件]
         let checkedTxt = textStartsWith("已选").findOne(1000);
         // log(checkedTxt);
