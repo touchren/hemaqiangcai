@@ -4,8 +4,8 @@ const PACKAGE_NAME = "com.wudaokou.hippo";
 const AUTO_JS_PACKAGE_NAME = "org.autojs.autojs";
 // 最大尝试轮数
 const MAX_ROUND = 10;
-// 每轮最长重试次数 (平均单次秒)
-const MAX_TIMES_PER_ROUND = 500;
+// 每轮最长重试次数 (平均单次5秒,300次约25分钟)
+const MAX_TIMES_PER_ROUND = 300;
 // 点击按钮之后的通用等待时间
 const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
@@ -32,9 +32,9 @@ var buyMode = 1;
 // 过滤商品的正则表示式 .+ 表示所有商品
 // var itemFilterStr = ".+";
 //var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
-// 每日鲜语|
+// 每日鲜语|清炒河虾仁|0添加酸奶原味|五香牛腱|晶萃大虾仁
 var itemFilterStr =
-  ".*(工坊大红肠300g|0添加酸奶原味|卫生巾日用|一次性手套|肋排条|五香牛腱|虾仁).*";
+  ".*(工坊大红肠300g|叶菜|日用卫生巾|海南贵妃芒|玉菇甜瓜|一次性手套|肋排条).*";
 // 任务中断次数
 var interruptCount = 0;
 
@@ -76,15 +76,15 @@ toastLog("程序结束");
 function start() {
   count = 0;
   isFailed = false;
-  isSuccess = false;
+  isSuccessed = false;
   if (ACTIVE_STOP_APP == 1) {
     kill_app(APP_NAME);
   }
   launchApp(APP_NAME);
   commonWait();
-  while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccess) {
+  while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|订单详情)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情)/
     ).findOne(5000);
 
     if (page) {
@@ -100,9 +100,8 @@ function start() {
         // 选择时间
         // 确认支付
         doInSubmit();
-        // } else if (page.text() == "我知道了") {
-        //   // 系统提示, 点掉即可 (220426 盒马里面好像并没有这个按钮)
-        //   click_i_know();
+      } else if (page.text() == "确认付款") {
+        payConfirm();
       } else if (page.text() == "确定") {
         // 系统提示, 点掉即可
         click_i_know();
@@ -178,6 +177,8 @@ function start() {
 }
 
 function paySuccess() {
+  // 标记为成功
+  isSuccessed = true;
   musicNotify("03.pay_success");
   let returnBtn = desc("完成").findOne(1000);
   if (returnBtn) {
@@ -461,7 +462,7 @@ function doInSubmit() {
         let confirmTimeBtn = text("确认").findOne(300);
         if (confirmTimeBtn) {
           confirmTimeBtn.click();
-          commonWait();
+          // commonWait(); // 没有调用接口, 无需等待
         }
       }
       orderConfirm();
@@ -595,13 +596,11 @@ function orderConfirm() {
 function payConfirm() {
   let payBtn = textMatches(".*确认付款.*").findOne(1000);
   if (payBtn) {
-    log("已经进入支付页面, 按钮[" + payBtn.text() + "]");
-    // 标记为成功
-    isSuccessed = true;
+    log("已弹出确认付款页面, 按钮[" + payBtn.text() + "]");
     // 等待用户付款
-    toastLog("等待用户手工付款");
-    sleep(3000);
-    //musicNotify();
+    toastLog("等待用户[确认付款]中");
+    musicNotify("06.need_pay");
+    sleep(5000);
   }
 }
 
@@ -659,7 +658,6 @@ function itemSel() {
         console.error(e.stack);
       }
     } else {
-      console.info("INFO 找到符合条件的商品, 选中商品");
       // 220428 随机选中某件可选商品
       let randomIdx = random(0, activeItems.length - 1);
       for (let i = 0; i < activeItems.length; i++) {
@@ -685,7 +683,7 @@ function itemSel() {
       commonWait();
     }
   } else {
-    log("通过第一个商品判断出当前[不可下单]");
+    log("当前[不可下单]");
   }
   return canBuy;
 }
