@@ -53,6 +53,9 @@ engines.all().map((ScriptEngine) => {
 device.wakeUp();
 commonWait();
 auto.waitFor();
+// 需要从剪贴板复制内容
+toastLogClip();
+sleep(2000);
 // console.show();
 // 开始循环执行
 while (round < MAX_ROUND) {
@@ -67,9 +70,18 @@ while (round < MAX_ROUND) {
     sleep(3000);
     musicNotify("09.error");
   }
-  let randomSleep = random(10 * 1000, 50 * 1000);
-  toastLog("第" + round + "轮抢菜执行结束, 休息[" + randomSleep + "]ms");
-  sleep(randomSleep);
+  let randomSleep = random(3, 20);
+  let secondPerTime = 3;
+  for (let i = 0; i < randomSleep; i++) {
+    toastLog(
+      "第" +
+        round +
+        "轮抢菜执行结束, 等待" +
+        (randomSleep * secondPerTime - i * secondPerTime) +
+        "秒后重试"
+    );
+    sleep(secondPerTime * 1000);
+  }
 }
 toastLog("程序结束");
 
@@ -84,7 +96,7 @@ function start() {
   commonWait();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败)/
     ).findOne(5000);
 
     if (page) {
@@ -109,18 +121,20 @@ function start() {
         back();
         commonWait();
       } else if (page.text().indexOf("请稍后重试") != -1) {
-        // 当前购物高峰期人数较多, 请稍后重试
-        log("通过text查找到[%s]", page.text());
+        // 220429 , 实测无效, 页面一张图片, 需要使用别的方式来判断
         back();
         commonWait();
       } else if (page.text().indexOf("完成验证") != -1) {
         // 当前购物高峰期人数较多, 请稍后重试
-        log("通过text查找到[%s]", page.text());
         musicNotify("05.need_manual");
         sleep(3000);
       } else if (page.text() == "订单详情") {
         log("等待用户进行操作");
         sleep(5000);
+      } else if (page.text() == "加载失败") {
+        // 网络不好的情况下, 会 [加载失败]
+        back();
+        commonWait();
       } else {
         console.error("ERROR1: 当前在其他页面");
         musicNotify("09.error");
@@ -137,9 +151,13 @@ function start() {
           commonWait();
         }
       } else {
+        // 当前购物高峰期人数较多, 请稍后重试
+        // TODO 增加 这个图片的判断规则
         console.error("ERROR2: 无法判断当前在哪个页面");
         musicNotify("09.error");
         sleep(1000);
+        //back();
+        //commonWait();
       }
     }
 
@@ -174,6 +192,21 @@ function start() {
       ", isSuccessed:" +
       isSuccessed
   );
+}
+
+function toastLogClip() {
+  var w = floaty.window(
+    <frame gravity="center" bg="#ffffff">
+      <text id="text">临时获取剪贴板</text>
+    </frame>
+  );
+  ui.run(function () {
+    w.requestFocus();
+    setTimeout(() => {
+      toastLog("请确认当前剪贴板内容为门牌号:[" + getClip() + "]");
+      w.close();
+    }, 1);
+  });
 }
 
 function paySuccess() {
@@ -546,11 +579,11 @@ function orderConfirm() {
         // 库存不足 -> [失效原因:] 抱歉, 您选的商品太火爆了, 一会儿功夫库存不足了(008)
         // 运力不足 -> [失效原因:] 非常抱歉, 当前商品运力不足(063)
         if (textMatches(/(.*运力不足.*)/).findOne(200)) {
-          for (let i = 0; i < 10; i++) {
-            if (i % 5 == 1) {
+          for (let i = 0; i < 20; i++) {
+            if (i % 10 == 1) {
               musicNotify("04.no_express");
             }
-            toastLog("运力不足,等待" + (30 - i * 3) + "秒后重试");
+            toastLog("运力不足,等待" + (20 * 3 - i * 3) + "秒后重试");
             sleep(3 * 1000);
           }
         }
