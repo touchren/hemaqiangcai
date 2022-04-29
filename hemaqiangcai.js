@@ -20,18 +20,18 @@ var isFailed = false;
 // 确实已成功
 var isSuccessed = false;
 
+// 正在支付中 (这种情况下, 尽量保持稳定, 避免回退页面的操作)
+// 目前是只要是到了[确认订单]页面, 有门牌号输入框, 就认为是到了支付中的场景, 到商品页就不是支付中了
+var isPaying = false;
+
 // 遍历所有商品
 var hasFindAllItems = false;
 
-// 自动选择商品逻辑
-// 0 全选所有符合条件的商品, 如果都没有则抢第一件商品
-// 1 在mode 0的基础上, 仅抢第一件商品(包含不符合条件的)
-// 除了0,1外 不自动选择商品, 停留在商品选择页面, 人工选择商品后自动提交
-var buyMode = 1;
+// 自动选择商品逻辑 查看 config.js
+var buyMode ;
 
-// 过滤商品的正则表示式 .+ 表示所有商品
-// var itemFilterStr = ".+";
-var itemFilterStr = ".*(每日鲜语|工坊大红肠300g|一次性手套|肋排条|超大蓝莓).*";
+// 过滤商品的正则表示式 查看 config.js
+var itemFilterStr ;
 // 任务中断次数
 var interruptCount = 0;
 
@@ -47,21 +47,11 @@ engines.all().map((ScriptEngine) => {
   }
 });
 
-device.wakeUp();
-commonWait();
 auto.waitFor();
-// 需要从剪贴板复制内容
-// toastLog(getClip());
-toastLogClip();
-sleep(1000);
-// 获取配置文件的内容进行覆盖
-if (files.exists("./config.js")) {
-  log("存在配置文件:./config.js");
-  let config = require("./config.js");
-  log("配置项为: ", config);
-  itemFilterStr = config.itemFilterStr;
-}
+unlock();
+getConfig()
 // console.show();
+
 // 开始循环执行
 while (round < MAX_ROUND) {
   round++;
@@ -170,10 +160,12 @@ function start() {
         // TODO 增加 这个图片的判断规则
         console.error("ERROR2: 无法判断当前在哪个页面");
         musicNotify("09.error");
-        log(depth(10).findOne());
-        sleep(5000);
-        back();
-        commonWait();
+        log("调试高峰期人数较多:", depth(10).findOne());
+        if (!isPaying) {
+          sleep(5000);
+          back();
+          commonWait();
+        }
       }
     }
 
@@ -192,10 +184,11 @@ function start() {
         toastLog("每1分钟重新激活一次[" + APP_NAME + "]");
         home();
         commonWait();
+        commonWait();
         launchApp(APP_NAME);
         commonWait();
+        commonWait();
       }
-      sleep(3000);
     }
   }
   toastLog(
@@ -208,6 +201,30 @@ function start() {
       ", isSuccessed:" +
       isSuccessed
   );
+}
+
+function getConfig() {
+  // 获取配置文件的内容进行覆盖
+  if (files.exists("./config.js")) {
+    log("存在配置文件:./config.js");
+    let config = require("./config.js");
+    log("配置项为: ", config);
+    itemFilterStr = config.itemFilterStr;
+    buyMode = config.buyMode;
+    if (config.address) {
+      setClip(config.address);
+    }
+  }
+  toastLogClip();
+  sleep(1000);
+}
+
+// 解锁屏幕
+function unlock() {
+  if (!device.isScreenOn()) {
+    let unlocker = require("./Unlock.js");
+    unlocker.exec();
+  }
 }
 
 function toastLogClip() {
@@ -502,6 +519,7 @@ function clickByCoor(obj) {
 function doInSubmit() {
   log("已进入[确认订单]页面");
   musicNotify("01.submit");
+  let addressIsError = inputAddress();
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   let selectTimeBtn = textMatches(
     "(￥0.00|.*前送达|选择时间|确认付款|.*滑块完成验证.*)"
@@ -522,7 +540,10 @@ function doInSubmit() {
         let confirmTimeBtn = text("确认").findOne(300);
         if (confirmTimeBtn) {
           confirmTimeBtn.click();
-          // commonWait(); // 没有调用接口, 无需等待
+          // TODO 22/04/29 第一次orderConfirm会无法识别到3个输入框, 加入延时试试看
+          console.time("等待输入框出现耗时");
+          className("android.widget.EditText").findOne(1000);
+          console.timeEnd("等待输入框出现耗时");
         }
       }
       orderConfirm();
@@ -549,24 +570,31 @@ function doInSubmit() {
   }
 }
 
-function orderConfirm() {
-  log("进入[确认订单]第二部分");
-  let addressIsError = false;
+/**
+ * 自动输入地址
+ * 返回是否有错误
+ * 1. 没有地址输入框 return false -> 往下走, 判断金额
+ * 2. 有地址输入框, 但是设置成功了 return false; -> 往下走, 提交订单
+ * 3. 有地址输入框, 但是设置失败了 return true; -> 不往下走, 需要等待人工输入地址
+ * @returns
+ */
+function inputAddress() {
+  // 有地址输入框, 但是为空, 或者默认值 true
+  //
+  let addressIsError = true;
+  let isSetVal = false;
   // 220427 [门牌号] 会为空, 前面两项会自动根据淘宝账号带出
-  // TODO 需要验证移除条件后是否能查出地址
-  //  .focusable()
-  //  .clickable()
   className("android.widget.EditText")
     .find()
     .forEach((child, idx) => {
       log("第" + (idx + 1) + "项当前值:" + child.text());
       if (idx == 2) {
+        isPaying = true;
         if (
           child.text() == null ||
           child.text() == "" ||
           child.text() == "例：8号楼808室"
         ) {
-          addressIsError = true;
           //toastLog("请手工输入第" + (idx + 1) + "项内容");
           //sleep(3000);
           log("选中地址输入框");
@@ -578,13 +606,43 @@ function orderConfirm() {
           back();
           commonWait();
           // 220428, 测试粘贴剪贴板可以成功
-          addressIsError = false;
+          isSetVal = true;
         } else {
           log("当前地址为:[%s]", child.text());
-          //addressIsError = false;
+          addressIsError = false;
         }
       }
     });
+
+  if (isSetVal) {
+    let inputs = className("android.widget.EditText").find();
+    if (inputs) {
+      let child = inputs.get(2);
+      if (
+        child.text() == null ||
+        child.text() == "" ||
+        child.text() == "例：8号楼808室"
+      ) {
+        console.error("地址设置失败, 当前值为:[%s]", child.text());
+        musicNotify("05.need_manual");
+        sleep(2000);
+      } else {
+        addressIsError = false;
+      }
+    } else {
+      console.error("ERROR 没有找到输入框");
+    }
+  } else {
+    // 没有地址输入框的情况下, 设置为无错误
+    addressIsError = false;
+  }
+
+  return addressIsError;
+}
+
+function orderConfirm() {
+  log("进入[确认订单]第二部分");
+  let addressIsError = inputAddress();
   if (!addressIsError) {
     let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(1000);
     if (totalAmount) {
@@ -609,6 +667,7 @@ function orderConfirm() {
         back();
         commonWait();
       } else {
+        // 有金额了就认为是支付中, 如果失败返回了首页, 再重置为false
         let confirmBtn = text("提交订单|确认付款").findOne(1000);
         if (confirmBtn) {
           musicNotify("02.pay");
@@ -752,6 +811,7 @@ function itemSel() {
 function doInItemSel() {
   // text("小区提货点").exists()
   log("当前在商品选择页面");
+  isPaying = false;
   // let notServicePage = id("hema-floor-title-4732230300").findOne(1000).parent();
   //console.time('商品列表页,确认状态耗时')
   let specialPackageTxt = textMatches(
@@ -881,7 +941,7 @@ function doInHome() {
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = text("小区提货点").findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
+    let mall = text("小区提货点").findOne(5000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
