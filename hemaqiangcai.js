@@ -31,10 +31,7 @@ var buyMode = 1;
 
 // 过滤商品的正则表示式 .+ 表示所有商品
 // var itemFilterStr = ".+";
-//var itemFilterStr = ".*(蛋糕|吐司|餐包|麻薯|菠萝包).*";
-// 每日鲜语|清炒河虾仁|0添加酸奶原味|五香牛腱|晶萃大虾仁
-var itemFilterStr =
-  ".*(工坊大红肠300g|叶菜|日用卫生巾|海南贵妃芒|玉菇甜瓜|一次性手套|肋排条).*";
+var itemFilterStr = ".*(每日鲜语|工坊大红肠300g|一次性手套|肋排条|超大蓝莓).*";
 // 任务中断次数
 var interruptCount = 0;
 
@@ -54,8 +51,16 @@ device.wakeUp();
 commonWait();
 auto.waitFor();
 // 需要从剪贴板复制内容
+// toastLog(getClip());
 toastLogClip();
-sleep(2000);
+sleep(1000);
+// 获取配置文件的内容进行覆盖
+if (files.exists("./config.js")) {
+  log("存在配置文件:./config.js");
+  let config = require("./config.js");
+  log("配置项为: ", config);
+  itemFilterStr = config.itemFilterStr;
+}
 // console.show();
 // 开始循环执行
 while (round < MAX_ROUND) {
@@ -97,8 +102,7 @@ function start() {
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
     let page = textMatches(
       /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败)/
-    ).findOne(5000);
-
+    ).findOne(4000);
     if (page) {
       log("进入条件1:[" + page.text() + "]");
       if (page.text() == "小区提货点") {
@@ -141,12 +145,23 @@ function start() {
         sleep(1000);
       }
     } else {
-      let page2 = descMatches(/(支付成功|.*请稍后重试.*)/).findOne(3000);
+      let page2 = descMatches(
+        /(支付成功|.*请稍后重试.*|盒区团购|O1CN011FpVIT1g4oGMqeVw6.*)/
+      ).findOne(1000);
+      // [9:0][desc]content:[盒区团购]bounds:[0, 67, 1081, 2210]
+      // [10:1]id:[standby][desc]content:[O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700]bounds:[0, 67, 1081, 2210]
       if (page2) {
+        log("进入条件5:[" + page2.desc() + "]");
         if (page2.desc() == "支付成功") {
           paySuccess();
+        } else if (
+          page2.desc() == "盒区团购" ||
+          page2.desc() ==
+            "O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700"
+        ) {
+          back();
+          commonWait();
         } else if (page2.desc().indexOf("请稍后重试") != -1) {
-          log("通过desc查找到[%s]", page2.desc());
           back();
           commonWait();
         }
@@ -155,9 +170,10 @@ function start() {
         // TODO 增加 这个图片的判断规则
         console.error("ERROR2: 无法判断当前在哪个页面");
         musicNotify("09.error");
-        sleep(1000);
-        //back();
-        //commonWait();
+        log(depth(10).findOne());
+        sleep(5000);
+        back();
+        commonWait();
       }
     }
 
@@ -197,7 +213,7 @@ function start() {
 function toastLogClip() {
   var w = floaty.window(
     <frame gravity="center" bg="#ffffff">
-      <text id="text">临时获取剪贴板</text>
+      <text id="text">获取剪贴板</text>
     </frame>
   );
   ui.run(function () {
@@ -205,7 +221,7 @@ function toastLogClip() {
     setTimeout(() => {
       toastLog("请确认当前剪贴板内容为门牌号:[" + getClip() + "]");
       w.close();
-    }, 1);
+    }, 500);
   });
 }
 
@@ -740,7 +756,7 @@ function doInItemSel() {
   //console.time('商品列表页,确认状态耗时')
   let specialPackageTxt = textMatches(
     /(今日推荐|立即下单|运力已约满|已选.*)/
-  ).findOne(5000);
+  ).findOne(4000);
   //console.timeEnd('商品列表页,确认状态耗时')
   if (specialPackageTxt) {
     log("进入条件2:" + specialPackageTxt.text());
@@ -865,7 +881,7 @@ function doInHome() {
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = text("小区提货点").findOne(10000); // S8 加载耗时3.3s
+    let mall = text("小区提货点").findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
@@ -874,6 +890,8 @@ function doInHome() {
     commonWait();
   }
 }
+
+// ###############################################################
 
 function commonWait() {
   sleep(COMMON_SLEEP_TIME_IN_MILLS + random(0, 50));
