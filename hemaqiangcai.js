@@ -28,10 +28,10 @@ var isPaying = false;
 var hasFindAllItems = false;
 
 // 自动选择商品逻辑 查看 config.js
-var buyMode ;
+var buyMode;
 
 // 过滤商品的正则表示式 查看 config.js
-var itemFilterStr ;
+var itemFilterStr;
 // 任务中断次数
 var interruptCount = 0;
 
@@ -49,7 +49,7 @@ engines.all().map((ScriptEngine) => {
 
 auto.waitFor();
 unlock();
-getConfig()
+getConfig();
 // console.show();
 
 // 开始循环执行
@@ -90,8 +90,9 @@ function start() {
   launchApp(APP_NAME);
   commonWait();
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
+    // 220430 盒区团购 会与 商品选择页冲突
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败|O1CN011FpVIT1g4oGMqeVw6.*)/
     ).findOne(4000);
     if (page) {
       log("进入条件1:[" + page.text() + "]");
@@ -114,10 +115,15 @@ function start() {
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
         back();
         commonWait();
-      } else if (page.text().indexOf("请稍后重试") != -1) {
-        // 220429 , 实测无效, 页面一张图片, 需要使用别的方式来判断
+      } else if (page.text().indexOf("O1CN011FpVIT1g4oGMqeVw6") != -1) {
+        // |.*请稍后重试.*
+        // [10:1]id:[standby][desc]content:[O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700]bounds:[0, 67, 1081, 2210]
         back();
         commonWait();
+        // } else if (page.text().indexOf("请稍后重试") != -1) {
+        //   // 220429 , 实测无效, 页面一张图片, 需要使用别的方式来判断
+        //   back();
+        //   commonWait();
       } else if (page.text().indexOf("完成验证") != -1) {
         // 当前购物高峰期人数较多, 请稍后重试
         musicNotify("05.need_manual");
@@ -135,33 +141,25 @@ function start() {
         sleep(1000);
       }
     } else {
-      let page2 = descMatches(
-        /(支付成功|.*请稍后重试.*|盒区团购|O1CN011FpVIT1g4oGMqeVw6.*)/
-      ).findOne(1000);
-      // [9:0][desc]content:[盒区团购]bounds:[0, 67, 1081, 2210]
-      // [10:1]id:[standby][desc]content:[O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700]bounds:[0, 67, 1081, 2210]
+      let page2 = descMatches(/(支付成功)/).findOne(1000);
       if (page2) {
         log("进入条件5:[" + page2.desc() + "]");
         if (page2.desc() == "支付成功") {
           paySuccess();
-        } else if (
-          page2.desc() == "盒区团购" ||
-          page2.desc() ==
-            "O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700"
-        ) {
-          back();
-          commonWait();
-        } else if (page2.desc().indexOf("请稍后重试") != -1) {
-          back();
-          commonWait();
         }
+        // 220429 无效判断
+        // else if (page2.desc().indexOf("请稍后重试") != -1) {
+        //   back();
+        //   commonWait();
+        // }
       } else {
         // 当前购物高峰期人数较多, 请稍后重试
         // TODO 增加 这个图片的判断规则
         console.error("ERROR2: 无法判断当前在哪个页面");
         musicNotify("09.error");
-        log("调试高峰期人数较多:", depth(10).findOne());
+        log("调试高峰期人数较多:", depth(10).findOnce(1));
         if (!isPaying) {
+          // 非支付中, 才会尝试返回
           sleep(5000);
           back();
           commonWait();
@@ -521,14 +519,15 @@ function doInSubmit() {
   musicNotify("01.submit");
   let addressIsError = inputAddress();
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
+  // 220430 已经不需要选择时间, 所以可以直接下一步
   let selectTimeBtn = textMatches(
-    "(￥0.00|.*前送达|选择时间|确认付款|.*滑块完成验证.*)"
+    "(￥0.00|￥d+.d{1,2}|.*前送达|.*自动选择可用时间|选择时间|确认付款|.*滑块完成验证.*)"
   ).findOne(2000);
   // 通过选择时间按钮, 判断是否还有货
   if (selectTimeBtn) {
     log("进入条件4: [%s]", selectTimeBtn.text());
     if (selectTimeBtn.text() == "选择时间") {
-      // log(selectTimeBtn);
+      // 220430 更新, 已经不需要这一步操作, 替换为[系统已为您自动选择可用时间], 暂时保留
       log("点击->[" + selectTimeBtn.text() + "]");
       clickByCoor(selectTimeBtn);
       // textStartsWith("18:00").findOne(5000);
@@ -557,7 +556,9 @@ function doInSubmit() {
       musicNotify("05.need_manual");
       sleep(3000);
     } else {
-      log("找到类似于[**前送达]的选择项");
+      // 系统已为您自动选择可用时间
+      // ￥
+      log("符合点击[提交订单]的条件,往下流转");
       orderConfirm();
     }
   } else {
@@ -602,7 +603,7 @@ function inputAddress() {
           log("粘贴剪贴板内容");
           child.paste();
           sleep(50);
-          log("点击返回, 关闭输入框");
+          log("触发[返回], 关闭输入框");
           back();
           commonWait();
           // 220428, 测试粘贴剪贴板可以成功
@@ -627,6 +628,7 @@ function inputAddress() {
         musicNotify("05.need_manual");
         sleep(2000);
       } else {
+        console.info("确认当前地址为:[%s]", child.text());
         addressIsError = false;
       }
     } else {
