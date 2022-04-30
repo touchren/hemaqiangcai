@@ -27,6 +27,9 @@ var isPaying = false;
 // 遍历所有商品
 var hasFindAllItems = false;
 
+// 遍历所有可售卖商品 (仅在需要人工选择商品的情况下打印)
+var hasFindAllActiveItems = false;
+
 // 自动选择商品逻辑 查看 config.js
 var buyMode;
 
@@ -153,16 +156,17 @@ function start() {
         //   commonWait();
         // }
       } else {
-        // 当前购物高峰期人数较多, 请稍后重试
-        // TODO 增加 这个图片的判断规则
         console.error("ERROR2: 无法判断当前在哪个页面");
-        musicNotify("09.error");
-        log("调试高峰期人数较多:", depth(10).findOnce(1));
         if (!isPaying) {
           // 非支付中, 才会尝试返回
+          printPageUIObject();
+          musicNotify("09.error");
           sleep(5000);
           back();
           commonWait();
+        } else {
+          log("当前人工支付中");
+          // 支付中, 这个时候需要人工接入, 为了提升体验, 就不再反馈异常了
         }
       }
     }
@@ -201,6 +205,19 @@ function start() {
   );
 }
 
+function printPageUIObject() {
+  textMatches(".+")
+    .find()
+    .forEach((child, idx) => {
+      log("第" + (idx + 1) + "项当前text:" + child.text());
+    });
+  descMatches(".+")
+    .find()
+    .forEach((child, idx) => {
+      log("第" + (idx + 1) + "项当前text:" + child.desc());
+    });
+}
+
 function getConfig() {
   // 获取配置文件的内容进行覆盖
   if (files.exists("./config.js")) {
@@ -219,9 +236,10 @@ function getConfig() {
 
 // 解锁屏幕
 function unlock() {
-  if (!device.isScreenOn()) {
-    let unlocker = require("./Unlock.js");
-    unlocker.exec();
+  try {
+    require("./Unlock.js").exec();
+  } catch (e) {
+    console.error(e);
   }
 }
 
@@ -312,7 +330,31 @@ function printAllItems() {
   }
 }
 
-function listAllItems() {
+function printAllActiveItems() {
+  if (!hasFindAllActiveItems) {
+    let totalItemsStr = "";
+    let needItemsStr = "";
+    let itemIdx = 0;
+    let items = className("android.view.View")
+      .depth(18)
+      .textMatches(/(.+)/)
+      .find();
+    console.info("INFO allItems.size():" + items.size());
+    for (let v of items) {
+      itemIdx++;
+      if (itemIdx == 1) {
+        hasFindAllActiveItems = true;
+      }
+      if (filterActiveItem(v)) {
+        let itemInfo = getItemInfo(v);
+        totalItemsStr = totalItemsStr + itemIdx + ":" + itemInfo + "; ";
+      }
+    }
+    log("全部可购买商品列表: %s", totalItemsStr);
+  }
+}
+
+function listAllFilterItems() {
   let items = className("android.view.View")
     .depth(18)
     .textMatches(itemFilterStr)
@@ -517,7 +559,7 @@ function clickByCoor(obj) {
 function doInSubmit() {
   log("已进入[确认订单]页面");
   musicNotify("01.submit");
-  let addressIsError = inputAddress();
+  // let addressIsError = inputAddress();
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   // 220430 已经不需要选择时间, 所以可以直接下一步
   let selectTimeBtn = textMatches(
@@ -686,6 +728,8 @@ function orderConfirm() {
             payConfirm();
           }
         } else {
+          printPageUIObject();
+          musicNotify("02.pay");
           // 在输入信息的时候会挡住按钮
           if (submitOrderX && submitOrderY) {
             log(
@@ -696,9 +740,9 @@ function orderConfirm() {
             click(submitOrderX, submitOrderY);
           } else {
             console.error("没有缓存到[提交订单]的坐标");
+            console.error("ERROR5 未知情况");
+            musicNotify("09.error");
           }
-          console.error("ERROR5 未知情况");
-          musicNotify("09.error");
           commonWait();
         }
       }
@@ -725,10 +769,10 @@ function payConfirm() {
   }
 }
 
-function findActiveItems() {
+function findActiveFilterItems() {
   var activeItems = new Array();
   // 打印所有可买商品
-  let allItems = listAllItems();
+  let allItems = listAllFilterItems();
 
   for (var i = 0; i < allItems.length; i++) {
     var tempItem = allItems[i];
@@ -754,20 +798,27 @@ function itemSel() {
     canBuy = true;
     toastLog("当前[可下单]");
     // 1, 首先获取所有符合条件的商品
-    let activeItems = findActiveItems();
+    let activeItems = findActiveFilterItems();
     if (activeItems.length == 0) {
       try {
         console.info("INFO: 第一件商品信息: " + first.text());
         // if (filterActiveItem(first)) {
         // 0 或者 1, 自动选择
         // 其他, 不选择
-        if (buyMode == 0 || buyMode == 1) {
+        if (buyMode == 0) {
           toastLog("INFO 没有符合条件的可选商品, 下单第一件");
           clickRadioByItem(first);
           isItemSelectd = true;
+          // } else if (buyMode == 1) {
+          //   toastLog("INFO 没有符合条件的可选商品, 下单第一件");
+          //   clickRadioByItem(first);
+          //   isItemSelectd = true;
         } else {
-          toastLog("等待用户手工选择2,1秒后尝试[立即下单]");
-          sleep(1000);
+          // TODO 打印所有可买商品
+          musicNotify("05.need_manual");
+          printAllActiveItems();
+          toastLog("等待用户手工选择2,2秒后尝试[立即下单]");
+          sleep(2000);
         }
         // } else {
         //   // 不可购买的话, 返回首页, 重试
@@ -922,6 +973,7 @@ function doInItemSel() {
 /** 首页处理逻辑 */
 function doInHome() {
   count++;
+  hasFindAllActiveItems = false;
   log("抢菜第" + round + "-" + count + "次");
   if (count == 1 || count % 5 == 0) {
     toast("抢菜第" + round + "轮第" + count + "次");
@@ -943,7 +995,7 @@ function doInHome() {
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = text("小区提货点").findOne(5000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
+    let mall = textMatches(/(小区提货点|O1CN011FpVIT1g4oGMqe.*)/).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
