@@ -38,6 +38,12 @@ var itemFilterStr;
 // 任务中断次数
 var interruptCount = 0;
 
+// 当前正在下单的商品
+var currentItemTxt;
+
+// 黑名单列表 (主要是无货)
+var blackItemArr = new Array();
+
 // [立即下单] 和 [提交订单] 的 中心坐标都与对方重叠, 填写 门牌号 的时候, 会获取不到 [提交订单] 对象, 使用[立即下单] 替代
 var submitOrderX;
 var submitOrderY;
@@ -95,7 +101,7 @@ function start() {
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
     // 220430 盒区团购 会与 商品选择页冲突
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败|O1CN011FpVIT1g4oGMqeVw6.*)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败|我的订单)/
     ).findOne(4000);
     if (page) {
       log("进入条件1:[" + page.text() + "]");
@@ -106,9 +112,7 @@ function start() {
         // 首页
         doInHome();
       } else if (page.text() == "确认订单") {
-        // 提交订单
-        // 选择时间
-        // 确认支付
+        // 提交订单|选择时间|确认支付
         doInSubmit();
       } else if (page.text() == "确认付款") {
         payConfirm();
@@ -118,15 +122,11 @@ function start() {
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
         back();
         commonWait();
-      } else if (page.text().indexOf("O1CN011FpVIT1g4oGMqeVw6") != -1) {
-        // |.*请稍后重试.*
+      } else if (page.text().indexOf("TB1FdH") != -1) {
         // [10:1]id:[standby][desc]content:[O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700]bounds:[0, 67, 1081, 2210]
+        console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
         back();
         commonWait();
-        // } else if (page.text().indexOf("请稍后重试") != -1) {
-        //   // 220429 , 实测无效, 页面一张图片, 需要使用别的方式来判断
-        //   back();
-        //   commonWait();
       } else if (page.text().indexOf("完成验证") != -1) {
         // 当前购物高峰期人数较多, 请稍后重试
         musicNotify("05.need_manual");
@@ -138,6 +138,14 @@ function start() {
         // 网络不好的情况下, 会 [加载失败]
         back();
         commonWait();
+      } else if (page.text() == "我的订单") {
+        // 其他页面, 都先跳转到首页
+        let homeBtn = text("首页").findOne(100);
+        if (homeBtn) {
+          clickByCoor(homeBtn);
+        } else {
+          back();
+        }
       } else {
         console.error("ERROR1: 当前在其他页面");
         musicNotify("09.error");
@@ -161,9 +169,14 @@ function start() {
           // 非支付中, 才会尝试返回
           printPageUIObject();
           musicNotify("09.error");
-          sleep(5000);
-          back();
+          let homeBtn = text("首页").findOne(100);
+          if (homeBtn) {
+            clickByCoor(homeBtn);
+          } else {
+            back();
+          }
           commonWait();
+          sleep(5000);
         } else {
           log("当前人工支付中");
           // 支付中, 这个时候需要人工接入, 为了提升体验, 就不再反馈异常了
@@ -209,12 +222,17 @@ function printPageUIObject() {
   textMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项当前text:" + child.text());
+      log("第" + (idx + 1) + "项text:" + child.text());
     });
   descMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项当前text:" + child.desc());
+      log("第" + (idx + 1) + "项desc:" + child.desc());
+    });
+  idMatches(".+")
+    .find()
+    .forEach((child, idx) => {
+      log("第" + (idx + 1) + "项id:" + child.desc());
     });
 }
 
@@ -341,12 +359,11 @@ function printAllActiveItems() {
       .find();
     console.info("INFO allItems.size():" + items.size());
     for (let v of items) {
-      itemIdx++;
-      if (itemIdx == 1) {
-        hasFindAllActiveItems = true;
-      }
       if (filterActiveItem(v)) {
+        itemIdx++;
+        hasFindAllActiveItems = true;
         let itemInfo = getItemInfo(v);
+        console.info(itemIdx + ":" + itemInfo);
         totalItemsStr = totalItemsStr + itemIdx + ":" + itemInfo + "; ";
       }
     }
@@ -366,50 +383,50 @@ function listAllFilterItems() {
 function filterActiveItem(item) {
   let isActive = true;
   let itemDiv = item.parent().parent().parent().parent();
-  // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
-  // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
-  itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
-    // log("子信息项"+idx+":" + temp);
-    if (
-      temp.text() ==
-        "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_" ||
-      temp.text() ==
-        "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
-    ) {
-      isActive = false;
-      // log("确认商品[" + item.text() + "]无运力或今日售完");
-    }
-  });
+  // idx 1: 图片 className: android.widget.Image;
+  let imageDivs = itemDiv.find(className("android.widget.Image"));
+  // 22/05/01 正常的商品会包含两个图片, 1:选项框, 2:商品图片
+  // 不能购买的商品, 会有3个图片, 3:今日售完/运力已约满
+  if (imageDivs.size() == 2) {
+    isActive = true;
+  } else if (imageDivs.size() == 3) {
+    isActive = false;
+  } else if (imageDivs.size() == 4) {
+    // 可购买, 并且被选中
+    isActive = true;
+  } else {
+    console.error("商品[%s]包含%s张图片", item.text(), imageDivs.size());
 
-  // if (isActive) {
-  //   console.info("INFO 确认商品[" + item.text() + "]可购买");
-  // }
+    imageDivs.forEach(function (temp, idx) {
+      log("子信息项" + idx + ":" + temp);
+    });
+  }
   return isActive;
 }
 
-function filterActiveItemByRadio(itemRadio) {
-  let isActive = true;
-  let itemDiv = itemRadio.parent().parent().parent().parent();
-  // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
-  // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
-  itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
-    // log("子信息项"+idx+":" + temp);
-    if (
-      temp.text() ==
-        "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_" ||
-      temp.text() ==
-        "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
-    ) {
-      isActive = false;
-      // log("确认商品[" + item.text() + "]无运力或今日售完");
-    }
-  });
+// function filterActiveItemByRadio(itemRadio) {
+//   let isActive = true;
+//   let itemDiv = itemRadio.parent().parent().parent().parent();
+//   // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+//   // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
+//   itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
+//     // log("子信息项"+idx+":" + temp);
+//     if (
+//       temp.text() ==
+//         "O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_" ||
+//       temp.text() ==
+//         "O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_"
+//     ) {
+//       isActive = false;
+//       // log("确认商品[" + item.text() + "]无运力或今日售完");
+//     }
+//   });
 
-  // if (isActive) {
-  //   console.info("INFO 确认商品[" + item.text() + "]可购买");
-  // }
-  return isActive;
-}
+//   // if (isActive) {
+//   //   console.info("INFO 确认商品[" + item.text() + "]可购买");
+//   // }
+//   return isActive;
+// }
 
 function clickRadioByItem(item) {
   let itemDiv = item.parent().parent().parent().parent();
@@ -452,7 +469,7 @@ function getItemInfo(v) {
   // idx 2: 货币(￥)
   // idx 3: 整数金额
   // idx 4: 小数金额 (可能没有)
-  // idx 5: 单位 (可能是4)
+  // idx 5: 单位
   if (infoList.size() == 6) {
     // 价格有小数的情况
     return (
@@ -479,13 +496,22 @@ function getItemInfo(v) {
       return (
         infoList.get(0).text() +
         "-" +
+        infoList.get(1).text() +
         infoList.get(2).text() +
-        infoList.get(3).text() +
         infoList.get(infoList.size() - 1).text() +
-        "-" +
-        infoList.size()
+        "(" +
+        infoList.size() +
+        ")"
       );
     }
+  } else if (infoList.size() == 4) {
+    // 价格有小数的情况
+    return (
+      infoList.get(0).text() +
+      "-" +
+      infoList.get(2).text() +
+      infoList.get(infoList.size() - 1).text()
+    );
   } else {
     return infoList.get(0).text() + "(" + infoList.size() + ")";
   }
@@ -505,8 +531,7 @@ function getItemInfoByRadio(v) {
       //log("子信息项:" + temp);
     });
   // idx 0: 图片
-  // idx 1: 图片 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
-  //             今日售完 text = O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
+  // idx 1: 图片 className: android.widget.Image;
   // idx 2: 图片
   // idx 3: 标题
   // idx 4: 描述
@@ -696,13 +721,22 @@ function orderConfirm() {
         log("当前订单总金额:" + totalAmount.text());
         // 库存不足 -> [失效原因:] 抱歉, 您选的商品太火爆了, 一会儿功夫库存不足了(008)
         // 运力不足 -> [失效原因:] 非常抱歉, 当前商品运力不足(063)
-        if (textMatches(/(.*运力不足.*)/).findOne(200)) {
-          for (let i = 0; i < 20; i++) {
-            if (i % 10 == 1) {
-              musicNotify("04.no_express");
+        let failReason =
+          textMatches(/(.*运力不足.*|.*库存不足.*)/).findOne(200);
+        if (failReason) {
+          if (failReason.text().indexOf("运力不足") != -1) {
+            for (let i = 0; i < 20; i++) {
+              if (i % 20 == 1) {
+                musicNotify("04.no_express");
+              }
+              toastLog("运力不足,等待" + (20 * 3 - i * 3) + "秒后重试");
+              sleep(3 * 1000);
             }
-            toastLog("运力不足,等待" + (20 * 3 - i * 3) + "秒后重试");
-            sleep(3 * 1000);
+          } else {
+            console.log("商品[%s]因为库存不足失败, 加入黑名单", currentItemTxt);
+            if (blackItemArr.indexOf(currentItemTxt) == -1) {
+              blackItemArr.push(currentItemTxt);
+            }
           }
         }
         back();
@@ -767,6 +801,7 @@ function payConfirm() {
     musicNotify("06.need_pay");
     sleep(5000);
   }
+  blackItemArr;
 }
 
 function findActiveFilterItems() {
@@ -777,11 +812,16 @@ function findActiveFilterItems() {
   for (var i = 0; i < allItems.length; i++) {
     var tempItem = allItems[i];
     if (filterActiveItem(tempItem)) {
-      activeItems.push(tempItem);
-      try {
-        console.info("INFO: 可购买商品信息: " + tempItem.text());
-      } catch (e) {
-        console.error(e.stack);
+      // 过滤黑名单里面的商品
+      if (blackItemArr.indexOf(tempItem.text()) == -1) {
+        activeItems.push(tempItem);
+        try {
+          console.info("INFO: 可购买商品信息: " + tempItem.text());
+        } catch (e) {
+          console.error(e.stack);
+        }
+      } else {
+        log("商品[%s]存在黑名单中, 跳过加入可购买名单", tempItem.text());
       }
     }
   }
@@ -792,32 +832,33 @@ function itemSel() {
   // 商品已选中
   let isItemSelectd = false;
   let first = findFirstItem();
+  // log("first: ", first);
   let canBuy = false;
-  // 如果有运力的情况下, 第一个商品肯定可购买的, 售罄的商品会排在后面
+  // 如果有运力的情况下, 第一个商品肯定可购买的, 今日售完的商品会排在后面
   if (filterActiveItem(first)) {
     canBuy = true;
     toastLog("当前[可下单]");
+    console.info("黑名单商品名单: ", blackItemArr);
     // 1, 首先获取所有符合条件的商品
     let activeItems = findActiveFilterItems();
     if (activeItems.length == 0) {
       try {
-        console.info("INFO: 第一件商品信息: " + first.text());
-        // if (filterActiveItem(first)) {
-        // 0 或者 1, 自动选择
-        // 其他, 不选择
+        console.info("INFO: 没有可购买的符合条件的商品");
+        // 0 自动选择第一件
         if (buyMode == 0) {
-          toastLog("INFO 没有符合条件的可选商品, 下单第一件");
+          toastLog("INFO 没有符合条件的可选商品, 下单第一件" + first.text());
           clickRadioByItem(first);
+          currentItemTxt = first.text();
           isItemSelectd = true;
           // } else if (buyMode == 1) {
           //   toastLog("INFO 没有符合条件的可选商品, 下单第一件");
           //   clickRadioByItem(first);
           //   isItemSelectd = true;
         } else {
-          // TODO 打印所有可买商品
+          // 0 等待人工选择
           musicNotify("05.need_manual");
           printAllActiveItems();
-          toastLog("等待用户手工选择2,2秒后尝试[立即下单]");
+          toastLog("等待用户手工选择2,2秒后尝试[立即下单],建议直接下单");
           sleep(2000);
         }
         // } else {
@@ -845,6 +886,7 @@ function itemSel() {
         } else if (buyMode == 0 || (buyMode == 1 && i == randomIdx)) {
           toastLog("INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]");
           clickRadioByItem(item);
+          currentItemTxt = item.text();
           isItemSelectd = true;
         } else {
           console.info(
@@ -868,21 +910,29 @@ function doInItemSel() {
   // let notServicePage = id("hema-floor-title-4732230300").findOne(1000).parent();
   //console.time('商品列表页,确认状态耗时')
   let specialPackageTxt = textMatches(
-    /(今日推荐|立即下单|运力已约满|已选.*)/
+    /(今日推荐|立即下单|运力已约满|抢购结束|已选.*)/
   ).findOne(4000);
   //console.timeEnd('商品列表页,确认状态耗时')
   if (specialPackageTxt) {
     log("进入条件2:" + specialPackageTxt.text());
     // 遍历所有的商品
+
     printAllItems();
     //log("当前在营业时间");
     // 220428 因为其实 [商品列表] 比 [立即下单] 按钮加载的更快, 考虑用第一个商品是否可购买来判断能否下单
     console.time("判断是否可买并选中耗时");
-    let canBuy = itemSel();
+    let canBuy = true;
+    if (
+      !specialPackageTxt.text().match("已选.*") ||
+      specialPackageTxt.text() == "已选0件"
+    ) {
+      canBuy = itemSel();
+    }
+
     console.timeEnd("判断是否可买并选中耗时");
     if (canBuy) {
       console.time("确认是否可下单 耗时");
-      let btn = textMatches(/(立即下单|运力已约满)/).findOne(4000); // S8大概 3500ms
+      let btn = textMatches(/(立即下单|运力已约满|抢购结束)/).findOne(4000); // S8大概 3500ms
       console.timeEnd("确认是否可下单 耗时");
       // musicNotify
       if (btn != null && btn.text() == "立即下单") {
@@ -983,19 +1033,19 @@ function doInHome() {
   let toListBtn = id("home_page_other_layout").findOne(1000); // 20ms
   if (toListBtn) {
     let loc = toListBtn.bounds();
-    log(
-      "通过坐标点击进入团购的按钮:[" +
-        loc.centerX() +
-        ", " +
-        loc.centerY() +
-        "]"
-    );
+    // log(
+    //   "通过坐标点击进入团购的按钮:[" +
+    //     loc.centerX() +
+    //     ", " +
+    //     loc.centerY() +
+    //     "]"
+    // );
     // 必须要等待超过300ms, 否则点击会无效, 无法进入[商品选择]页面
     commonWait();
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = textMatches(/(小区提货点|O1CN011FpVIT1g4oGMqe.*)/).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
+    let mall = textMatches(/(抢购结束|小区提货点|立即下单|运力已约满|O1CN011FpVIT1g4oGMqe.*)/).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
