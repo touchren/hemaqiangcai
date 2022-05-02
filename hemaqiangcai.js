@@ -9,7 +9,7 @@ const MAX_TIMES_PER_ROUND = 300;
 // 点击按钮之后的通用等待时间
 const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
-const ACTIVE_STOP_APP = 0;
+const ACTIVE_STOP_APP = 1;
 
 // 第几轮
 var round = 0;
@@ -47,6 +47,8 @@ var blackItemArr = new Array();
 // [立即下单] 和 [提交订单] 的 中心坐标都与对方重叠, 填写 门牌号 的时候, 会获取不到 [提交订单] 对象, 使用[立即下单] 替代
 var submitOrderX;
 var submitOrderY;
+
+var activeItemsSelected = false;
 
 // 调试期间临时使用, 关闭其他脚本
 engines.all().map((ScriptEngine) => {
@@ -382,6 +384,7 @@ function printAllActiveItems() {
       .textMatches(/(.+)/)
       .find();
     console.info("INFO allItems.size():" + items.size());
+    log("####### 可购买商品如下: #######")
     for (let v of items) {
       if (filterActiveItem(v)) {
         itemIdx++;
@@ -391,7 +394,8 @@ function printAllActiveItems() {
         totalItemsStr = totalItemsStr + itemIdx + ":" + itemInfo + "; ";
       }
     }
-    log("全部可购买商品列表: %s", totalItemsStr);
+    log("##########################")
+    // log("全部可购买商品列表: %s", totalItemsStr);
   }
 }
 
@@ -416,6 +420,8 @@ function filterActiveItem(item) {
   } else if (imageDivs.size() == 3) {
     isActive = false;
   } else if (imageDivs.size() == 4) {
+    // 认为已经有商品选中了
+    activeItemsSelected = true;
     // 有货, 并且被选中, 所以不需要再选择了, 设置为不可选中, 避免再次点击
     isActive = false;
   } else if (imageDivs.size() == 5) {
@@ -918,12 +924,13 @@ function itemSel() {
         if (buyMode != 0 && buyMode != 1) {
           // 播放需要手工操作的提示
           musicNotify("05.need_manual");
-          toastLog("等待用户手工选择1,2秒后尝试[立即下单],建议直接下单");
+          toastLog("请选择商品1");
           sleep(2000);
         } else if (buyMode == 0 || (buyMode == 1 && i == randomIdx)) {
           toastLog("INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]");
           clickRadioByItem(item);
           currentItemTxt = item.text();
+          activeItemsSelected = true;
           isItemSelectd = true;
         } else {
           console.info(
@@ -944,6 +951,7 @@ function doInItemSel() {
   // text("小区提货点").exists()
   log("当前在商品选择页面");
   isPaying = false;
+  activeItemsSelected = false;
   // let notServicePage = id("hema-floor-title-4732230300").findOne(1000).parent();
   //console.time('商品列表页,确认状态耗时')
   let specialPackageTxt = textMatches(
@@ -967,7 +975,7 @@ function doInItemSel() {
     // }
 
     console.timeEnd("判断是否可买并选中耗时");
-    if (canBuy) {
+    if (canBuy && activeItemsSelected) {
       console.time("确认是否可下单 耗时");
       let btn = textMatches(/(立即下单|配送已约满|抢购结束|即将开售)/).findOne(
         4000
@@ -982,7 +990,7 @@ function doInItemSel() {
         let checkedTxt = textStartsWith("已选").findOne(1000);
         // log(checkedTxt);
         if (checkedTxt) {
-          if (checkedTxt.text() != "已选0件") {
+          if (checkedTxt.text() != "已选0件" && activeItemsSelected) {
             log("当前商品情况:" + checkedTxt.text());
             let submitBtn = textMatches(
               "立即下单|即将开售|配送已约满|抢购结束"
@@ -1036,7 +1044,9 @@ function doInItemSel() {
               musicNotify("09.error");
             }
           } else {
-            console.log("等待选择商品");
+            console.log("没有符合要求的商品, 即将返回首页");
+            back();
+            commonWait();
           }
         } else {
           console.error("异常情况6, 没有找到[已选*件]文本");
