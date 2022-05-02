@@ -176,7 +176,7 @@ function start() {
             back();
           }
           commonWait();
-          sleep(5000);
+          sleep(500);
         } else {
           log("当前人工支付中");
           // 支付中, 这个时候需要人工接入, 为了提升体验, 就不再反馈异常了
@@ -219,6 +219,9 @@ function start() {
 }
 
 function printPageUIObject() {
+  // TODO, 识别高峰期页面特征, 下面两个txt都是通用的特征, 看看id是否可以首先
+  // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
+  // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2
   textMatches(".+")
     .find()
     .forEach((child, idx) => {
@@ -232,7 +235,7 @@ function printPageUIObject() {
   idMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项id:" + child.desc());
+      log("第" + (idx + 1) + "项id:" + child.id());
     });
 }
 
@@ -249,7 +252,6 @@ function getConfig() {
     }
   }
   toastLogClip();
-  sleep(1000);
 }
 
 // 解锁屏幕
@@ -691,9 +693,10 @@ function inputAddress() {
         child.text() == "" ||
         child.text() == "例：8号楼808室"
       ) {
-        console.error("地址设置失败, 当前值为:[%s]", child.text());
+        console.error("地址设置失败, 当前值为:[%s], 重新设置剪贴板", child.text());
+        getConfig();
         musicNotify("05.need_manual");
-        sleep(2000);
+        sleep(1000);
       } else {
         console.info("确认当前地址为:[%s]", child.text());
         addressIsError = false;
@@ -837,7 +840,7 @@ function itemSel() {
   // 如果有运力的情况下, 第一个商品肯定可购买的, 今日售完的商品会排在后面
   if (filterActiveItem(first)) {
     canBuy = true;
-    toastLog("当前[可下单]");
+    toastLog("当前[商品已上架]");
     console.info("黑名单商品名单: ", blackItemArr);
     // 1, 首先获取所有符合条件的商品
     let activeItems = findActiveFilterItems();
@@ -897,7 +900,7 @@ function itemSel() {
       commonWait();
     }
   } else {
-    log("当前[不可下单]");
+    log("当前[商品未上架]");
   }
   return canBuy;
 }
@@ -932,7 +935,9 @@ function doInItemSel() {
     console.timeEnd("判断是否可买并选中耗时");
     if (canBuy) {
       console.time("确认是否可下单 耗时");
-      let btn = textMatches(/(立即下单|运力已约满|抢购结束)/).findOne(4000); // S8大概 3500ms
+      let btn = textMatches(/(立即下单|运力已约满|抢购结束|即将开售)/).findOne(
+        4000
+      ); // S8大概 3500ms
       console.timeEnd("确认是否可下单 耗时");
       // musicNotify
       if (btn != null && btn.text() == "立即下单") {
@@ -945,9 +950,10 @@ function doInItemSel() {
         if (checkedTxt) {
           if (checkedTxt.text() != "已选0件") {
             log("当前商品情况:" + checkedTxt.text());
-
-            let submitBtn = text("立即下单").findOne(1000);
-            if (submitBtn) {
+            let submitBtn = textMatches(
+              "立即下单|即将开售|运力已约满|抢购结束"
+            ).findOne(1000);
+            if (submitBtn && submitBtn.text() == "立即下单") {
               // 这里是高峰期的核心操作
               // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
               // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
@@ -991,6 +997,7 @@ function doInItemSel() {
                 console.error(e.stack);
               }
             } else {
+              // 可能是 即将开售|运力已约满|抢购结束
               console.error("ERROR8: 没有找到[立即下单]按钮");
               musicNotify("09.error");
             }
@@ -1045,7 +1052,9 @@ function doInHome() {
     sleep(200);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
-    let mall = textMatches(/(抢购结束|小区提货点|立即下单|运力已约满|O1CN011FpVIT1g4oGMqe.*)/).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
+    let mall = textMatches(
+      /(抢购结束|小区提货点|立即下单|运力已约满|O1CN011FpVIT1g4oGMqe.*)/
+    ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
