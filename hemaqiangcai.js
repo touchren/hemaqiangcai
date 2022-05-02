@@ -384,7 +384,7 @@ function printAllActiveItems() {
       .textMatches(/(.+)/)
       .find();
     console.info("INFO allItems.size():" + items.size());
-    log("####### 可购买商品如下: #######")
+    log("####### 可购买商品如下: #######");
     for (let v of items) {
       if (filterActiveItem(v)) {
         itemIdx++;
@@ -394,7 +394,7 @@ function printAllActiveItems() {
         totalItemsStr = totalItemsStr + itemIdx + ":" + itemInfo + "; ";
       }
     }
-    log("##########################")
+    log("##########################");
     // log("全部可购买商品列表: %s", totalItemsStr);
   }
 }
@@ -914,8 +914,8 @@ function itemSel() {
         console.error(e.stack);
       }
     } else {
-      // 220428 随机选中某件可选商品
-      let randomIdx = random(0, activeItems.length - 1);
+      // 220502 选择所有符合条件的商品 // 220428 随机选中某件可选商品
+      //let randomIdx = random(0, activeItems.length - 1);
       for (let i = 0; i < activeItems.length; i++) {
         // 0, 全选所有商品
         // 1, 仅选择第一件商品
@@ -926,7 +926,7 @@ function itemSel() {
           musicNotify("05.need_manual");
           toastLog("请选择商品1");
           sleep(2000);
-        } else if (buyMode == 0 || (buyMode == 1 && i == randomIdx)) {
+        } else if (buyMode == 0 || buyMode == 1) {
           toastLog("INFO 选中第[" + (i + 1) + "]件商品: [" + item.text() + "]");
           clickRadioByItem(item);
           currentItemTxt = item.text();
