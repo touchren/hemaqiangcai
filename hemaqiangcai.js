@@ -57,9 +57,15 @@ engines.all().map((ScriptEngine) => {
 });
 
 auto.waitFor();
+device.wakeUp();
+commonWait();
+// 在定时任务执行时间的前一分钟先启动闹钟, 给手机亮屏
+closeClock();
+// 解锁手机
 unlock();
+
+// 覆盖配置项内部, 并设置粘贴板
 getConfig();
-// console.show();
 
 // 开始循环执行
 while (round < MAX_ROUND) {
@@ -254,6 +260,22 @@ function getConfig() {
   toastLogClip();
 }
 
+// 关闭闹钟提醒
+function closeClock() {
+  // 三星Note9闹钟关闭按钮
+  let closeClockBtn = id(
+    "com.sec.android.app.clockpackage:id/tabCircle"
+  ).findOne(200);
+  if (closeClockBtn) {
+    console.info("识别到三星闹钟界面, 执行[返回]关闭闹钟");
+    back();
+    commonWait();
+    sleep(500);
+  } else {
+    log("没有识别出闹钟按钮");
+  }
+}
+
 // 解锁屏幕
 function unlock() {
   try {
@@ -388,20 +410,23 @@ function filterActiveItem(item) {
   // idx 1: 图片 className: android.widget.Image;
   let imageDivs = itemDiv.find(className("android.widget.Image"));
   // 22/05/01 正常的商品会包含两个图片, 1:选项框, 2:商品图片
-  // 不能购买的商品, 会有3个图片, 3:今日售完/运力已约满
+  // 不能购买的商品, 会有3个图片, 3:今日售完/配送已约满
   if (imageDivs.size() == 2) {
     isActive = true;
   } else if (imageDivs.size() == 3) {
     isActive = false;
   } else if (imageDivs.size() == 4) {
-    // 可购买, 并且被选中
-    isActive = true;
+    // 有货, 并且被选中, 所以不需要再选择了, 设置为不可选中, 避免再次点击
+    isActive = false;
+  } else if (imageDivs.size() == 5) {
+    // 无货, 并且被选中
+    isActive = false;
   } else {
     console.error("商品[%s]包含%s张图片", item.text(), imageDivs.size());
-
     imageDivs.forEach(function (temp, idx) {
       log("子信息项" + idx + ":" + temp);
     });
+    isActive = false;
   }
   return isActive;
 }
@@ -409,7 +434,7 @@ function filterActiveItem(item) {
 // function filterActiveItemByRadio(itemRadio) {
 //   let isActive = true;
 //   let itemDiv = itemRadio.parent().parent().parent().parent();
-//   // idx 1: 运力已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
+//   // idx 1: 配送已约满 className: android.widget.Image; text: O1CN01q5RH5b1uzVvCCkGFZ_!!6000000006108-2-tps-192-53.png_220x10000.jpg_
 //   // 今日售完 text: O1CN01PVZbL01mz2Vt2gPtR_!!6000000005024-2-tps-192-53.png_220x10000.jpg_
 //   itemDiv.find(className("android.widget.Image")).each(function (temp, idx) {
 //     // log("子信息项"+idx+":" + temp);
@@ -585,7 +610,7 @@ function clickByCoor(obj) {
 /** 确认订单页面处理逻辑 */
 function doInSubmit() {
   log("已进入[确认订单]页面");
-  musicNotify("01.submit");
+  // musicNotify("01.submit");
   // let addressIsError = inputAddress();
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
   // 220430 已经不需要选择时间, 所以可以直接下一步
@@ -608,7 +633,6 @@ function doInSubmit() {
         let confirmTimeBtn = text("确认").findOne(300);
         if (confirmTimeBtn) {
           confirmTimeBtn.click();
-          // TODO 22/04/29 第一次orderConfirm会无法识别到3个输入框, 加入延时试试看
           console.time("等待输入框出现耗时");
           className("android.widget.EditText").findOne(1000);
           console.timeEnd("等待输入框出现耗时");
@@ -693,7 +717,10 @@ function inputAddress() {
         child.text() == "" ||
         child.text() == "例：8号楼808室"
       ) {
-        console.error("地址设置失败, 当前值为:[%s], 重新设置剪贴板", child.text());
+        console.error(
+          "地址设置失败, 当前值为:[%s], 重新设置剪贴板",
+          child.text()
+        );
         getConfig();
         musicNotify("05.need_manual");
         sleep(1000);
@@ -840,7 +867,7 @@ function itemSel() {
   // 如果有运力的情况下, 第一个商品肯定可购买的, 今日售完的商品会排在后面
   if (filterActiveItem(first)) {
     canBuy = true;
-    toastLog("当前[商品已上架]");
+    toastLog("[商品已上架]");
     console.info("黑名单商品名单: ", blackItemArr);
     // 1, 首先获取所有符合条件的商品
     let activeItems = findActiveFilterItems();
@@ -858,11 +885,18 @@ function itemSel() {
           //   clickRadioByItem(first);
           //   isItemSelectd = true;
         } else {
-          // 0 等待人工选择
-          musicNotify("05.need_manual");
           printAllActiveItems();
-          toastLog("等待用户手工选择2,2秒后尝试[立即下单],建议直接下单");
-          sleep(2000);
+          // 0 等待人工选择
+          // let checkedTxt = textStartsWith("已选").findOne(100);
+          // if (checkedTxt) {
+          //   if (checkedTxt.text() == "已选0件") {
+          //     musicNotify("05.need_manual");
+          //     toastLog("请手工选择商品");
+          //     sleep(2000);
+          //   } else {
+          //     console.info("[%s], 尝试提交", checkedTxt.text());
+          //   }
+          // }
         }
         // } else {
         //   // 不可购买的话, 返回首页, 重试
@@ -900,7 +934,7 @@ function itemSel() {
       commonWait();
     }
   } else {
-    log("当前[商品未上架]");
+    log("[商品未上架]");
   }
   return canBuy;
 }
@@ -913,7 +947,7 @@ function doInItemSel() {
   // let notServicePage = id("hema-floor-title-4732230300").findOne(1000).parent();
   //console.time('商品列表页,确认状态耗时')
   let specialPackageTxt = textMatches(
-    /(今日推荐|立即下单|运力已约满|抢购结束|已选.*)/
+    /立即下单|配送已约满|抢购结束|即将开售|已选.*/
   ).findOne(4000);
   //console.timeEnd('商品列表页,确认状态耗时')
   if (specialPackageTxt) {
@@ -925,17 +959,17 @@ function doInItemSel() {
     // 220428 因为其实 [商品列表] 比 [立即下单] 按钮加载的更快, 考虑用第一个商品是否可购买来判断能否下单
     console.time("判断是否可买并选中耗时");
     let canBuy = true;
-    if (
-      !specialPackageTxt.text().match("已选.*") ||
-      specialPackageTxt.text() == "已选0件"
-    ) {
-      canBuy = itemSel();
-    }
+    // if (
+    //   !specialPackageTxt.text().match("已选.*") ||
+    //   specialPackageTxt.text() == "已选0件"
+    // ) {
+    canBuy = itemSel(); // 由于已售完的物品也会在购物车里面, 但是又不可购买, 所以不能再通过这个条件进行判断
+    // }
 
     console.timeEnd("判断是否可买并选中耗时");
     if (canBuy) {
       console.time("确认是否可下单 耗时");
-      let btn = textMatches(/(立即下单|运力已约满|抢购结束|即将开售)/).findOne(
+      let btn = textMatches(/(立即下单|配送已约满|抢购结束|即将开售)/).findOne(
         4000
       ); // S8大概 3500ms
       console.timeEnd("确认是否可下单 耗时");
@@ -951,7 +985,7 @@ function doInItemSel() {
           if (checkedTxt.text() != "已选0件") {
             log("当前商品情况:" + checkedTxt.text());
             let submitBtn = textMatches(
-              "立即下单|即将开售|运力已约满|抢购结束"
+              "立即下单|即将开售|配送已约满|抢购结束"
             ).findOne(1000);
             if (submitBtn && submitBtn.text() == "立即下单") {
               // 这里是高峰期的核心操作
@@ -997,7 +1031,7 @@ function doInItemSel() {
                 console.error(e.stack);
               }
             } else {
-              // 可能是 即将开售|运力已约满|抢购结束
+              // 可能是 即将开售|配送已约满|抢购结束
               console.error("ERROR8: 没有找到[立即下单]按钮");
               musicNotify("09.error");
             }
@@ -1053,7 +1087,7 @@ function doInHome() {
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
     let mall = textMatches(
-      /(抢购结束|小区提货点|立即下单|运力已约满|O1CN011FpVIT1g4oGMqe.*)/
+      /(抢购结束|小区提货点|立即下单|配送已约满|O1CN011FpVIT1g4oGMqe.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
