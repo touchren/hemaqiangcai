@@ -140,27 +140,37 @@ function start() {
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
         // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
         //log("[返回]图标depth:%s", page.depth());
-        if (text("盒区团购").findOne(500)) {
-          // 大概耗时 60ms
-          // console.log("进入购物车");
-          // 购物车, 盒区团购
-          doInItemSel();
-        } else if (
-          text("O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2").findOne(
-            300
-          ) != null &&
-          text("O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2")
-            .findOne(300)
-            .depth() == 13
-        ) {
-          console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
+        //console.time("确认进入购物车耗时");
+        let temp = textMatches(/(盒区团购|O1CN01CYtPWu1MUBqQAUK9D.*)/).findOne(
+          1000
+        );
+        //console.timeEnd("确认进入购物车耗时");
+        if (temp) {
+          if (temp.text() == "盒区团购") {
+            // 大概耗时 60ms
+            // console.log("进入购物车");
+            // 购物车, 盒区团购
+            doInItemSel();
+          } else if (temp.depth() == 13) {
+            console.log(
+              "出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页"
+            );
+            back();
+            commonWait();
+          } else {
+            console.error("ERROR-04: 无法判断在哪个页面");
+            printPageUIObject();
+            sleep(2000);
+            back();
+            commonWait();
+          }
+        } else {
+          console.error("ERROR-01: 无法判断在哪个页面");
+          printPageUIObject();
+          //musicNotify("09.error");
+          sleep(2000);
           back();
           commonWait();
-        } else {
-          console.error("ERROR-01: 无法判断[返回]在哪个页面");
-          printPageUIObject();
-          musicNotify("09.error");
-          sleep(2000);
         }
       } else if (page.text().indexOf("完成验证") != -1) {
         // 当前购物高峰期人数较多, 请稍后重试
@@ -432,28 +442,32 @@ function listAllFilterItems() {
 
 function filterActiveItem(item) {
   let isActive = true;
-  let itemDiv = item.parent().parent().parent().parent();
-  // idx 1: 图片 className: android.widget.Image;
-  let imageDivs = itemDiv.find(className("android.widget.Image"));
-  // 22/05/01 正常的商品会包含两个图片, 1:选项框, 2:商品图片
-  // 不能购买的商品, 会有3个图片, 3:今日售完/配送已约满
-  if (imageDivs.size() == 2) {
-    isActive = true;
-  } else if (imageDivs.size() == 3) {
-    isActive = false;
-  } else if (imageDivs.size() == 4) {
-    // 认为已经有商品选中了
-    activeItemsSelected = true;
-    // 有货, 并且被选中, 所以不需要再选择了, 设置为不可选中, 避免再次点击
-    isActive = false;
-  } else if (imageDivs.size() == 5) {
-    // 无货, 并且被选中
-    isActive = false;
+  if (item) {
+    let itemDiv = item.parent().parent().parent().parent();
+    // idx 1: 图片 className: android.widget.Image;
+    let imageDivs = itemDiv.find(className("android.widget.Image"));
+    // 22/05/01 正常的商品会包含两个图片, 1:选项框, 2:商品图片
+    // 不能购买的商品, 会有3个图片, 3:今日售完/配送已约满
+    if (imageDivs.size() == 2) {
+      isActive = true;
+    } else if (imageDivs.size() == 3) {
+      isActive = false;
+    } else if (imageDivs.size() == 4) {
+      // 认为已经有商品选中了
+      activeItemsSelected = true;
+      // 有货, 并且被选中, 所以不需要再选择了, 设置为不可选中, 避免再次点击
+      isActive = false;
+    } else if (imageDivs.size() == 5) {
+      // 无货, 并且被选中
+      isActive = false;
+    } else {
+      console.error("商品[%s]包含%s张图片", item.text(), imageDivs.size());
+      imageDivs.forEach(function (temp, idx) {
+        log("子信息项" + idx + ":" + temp);
+      });
+      isActive = false;
+    }
   } else {
-    console.error("商品[%s]包含%s张图片", item.text(), imageDivs.size());
-    imageDivs.forEach(function (temp, idx) {
-      log("子信息项" + idx + ":" + temp);
-    });
     isActive = false;
   }
   return isActive;
@@ -936,7 +950,7 @@ function itemSel() {
         console.error(e.stack);
       }
     } else {
-      // 220502 选择所有符合条件的商品 //220428 随机选中某件可选商品
+      // 220502 选择所有符合条件的商品
       //let randomIdx = random(0, activeItems.length - 1);
       for (let i = 0; i < activeItems.length; i++) {
         // 0, 全选所有商品
@@ -1055,6 +1069,7 @@ function doInItemSel() {
       } else {
         log("没有找到[立即下单]或者没有需要的商品, 即将返回首页");
         back();
+        commonWait();
         commonWait();
       }
     } else {
