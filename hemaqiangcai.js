@@ -140,12 +140,15 @@ function start() {
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
         // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
         //log("[返回]图标depth:%s", page.depth());
-        if (text("盒区团购").findOne(300)) {
+        if (text("盒区团购").findOne(500)) {
           // 大概耗时 60ms
-          console.log("进入购物车");
+          // console.log("进入购物车");
           // 购物车, 盒区团购
           doInItemSel();
         } else if (
+          text("O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2").findOne(
+            300
+          ) != null &&
           text("O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2")
             .findOne(300)
             .depth() == 13
