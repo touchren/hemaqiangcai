@@ -112,8 +112,9 @@ function start() {
 
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
     // 返回按钮图标 TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
+    // 图片text O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|盒区团购|确认订单|确认付款|订单详情|加载失败|我的订单|TB1FdHOtj39.*)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|盒区团购|确认订单|确认付款|订单详情|加载失败|我的订单|困鱼|日志|O1CN01CYtPWu1.*)/
     ).findOne(4000);
     if (page) {
       log("进入条件1:[" + page.text() + "]");
@@ -134,7 +135,9 @@ function start() {
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
         back();
         commonWait();
-      } else if (page.text().indexOf("TB1FdHOtj39") != -1) {
+      } else if (page.text() == "困鱼" || page.text() == "日志") {
+        waitCheckLog();
+      } else if (page.text().indexOf("O1CN01CYtPWu1") != -1) {
         // 05/03 识别高峰期页面特征, 下面两个txt都是通用的特征
         // depth == 14 都是
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
@@ -256,6 +259,11 @@ function start() {
       ", isSuccessed:" +
       isSuccessed
   );
+}
+
+function waitCheckLog() {
+  //log("正在查看日志")
+  sleep(3000);
 }
 
 function printPageUIObject() {
