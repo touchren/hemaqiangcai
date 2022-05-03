@@ -9,7 +9,7 @@ const MAX_TIMES_PER_ROUND = 300;
 // 点击按钮之后的通用等待时间
 const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
-const ACTIVE_STOP_APP = 1;
+const ACTIVE_STOP_APP = 0;
 
 // 第几轮
 var round = 0;
@@ -90,7 +90,7 @@ while (round < MAX_ROUND) {
         round +
         "轮抢菜执行结束, 等待" +
         (randomSleep * secondPerTime - i * secondPerTime) +
-        "秒后重试"
+        "秒后继续"
     );
     sleep(secondPerTime * 1000);
   }
@@ -106,14 +106,18 @@ function start() {
   }
   launchApp(APP_NAME);
   commonWait();
+  if (ACTIVE_STOP_APP == 1) {
+    sleep(3000);
+  }
+
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
-    // 220430 盒区团购 会与 商品选择页冲突
+    // 返回按钮图标 TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|小区提货点|确认订单|确认付款|订单详情|加载失败|我的订单)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|盒区团购|确认订单|确认付款|订单详情|加载失败|我的订单|TB1FdHOtj39.*)/
     ).findOne(4000);
     if (page) {
       log("进入条件1:[" + page.text() + "]");
-      if (page.text() == "小区提货点") {
+      if (page.text() == "盒区团购") {
         // 购物车
         doInItemSel();
       } else if (page.text() == "搜索") {
@@ -130,11 +134,31 @@ function start() {
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
         back();
         commonWait();
-      } else if (page.text().indexOf("TB1FdH") != -1) {
-        // [10:1]id:[standby][desc]content:[O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700]bounds:[0, 67, 1081, 2210]
-        console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
-        back();
-        commonWait();
+      } else if (page.text().indexOf("TB1FdHOtj39") != -1) {
+        // 05/03 识别高峰期页面特征, 下面两个txt都是通用的特征
+        // depth == 14 都是
+        // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
+        // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
+        //log("[返回]图标depth:%s", page.depth());
+        if (text("盒区团购").findOne(300)) {
+          // 大概耗时 60ms
+          console.log("进入购物车");
+          // 购物车, 盒区团购
+          doInItemSel();
+        } else if (
+          text("O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2")
+            .findOne(300)
+            .depth() == 13
+        ) {
+          console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
+          back();
+          commonWait();
+        } else {
+          console.error("ERROR-01: 无法判断[返回]在哪个页面");
+          printPageUIObject();
+          musicNotify("09.error");
+          sleep(2000);
+        }
       } else if (page.text().indexOf("完成验证") != -1) {
         // 当前购物高峰期人数较多, 请稍后重试
         musicNotify("05.need_manual");
@@ -155,7 +179,7 @@ function start() {
           back();
         }
       } else {
-        console.error("ERROR1: 当前在其他页面");
+        console.error("ERROR-02: 当前在其他页面");
         musicNotify("09.error");
         sleep(1000);
       }
@@ -166,13 +190,8 @@ function start() {
         if (page2.desc() == "支付成功") {
           paySuccess();
         }
-        // 220429 无效判断
-        // else if (page2.desc().indexOf("请稍后重试") != -1) {
-        //   back();
-        //   commonWait();
-        // }
       } else {
-        console.error("ERROR2: 无法判断当前在哪个页面");
+        console.error("ERROR-03: 无法判断当前在哪个页面");
         if (!isPaying) {
           // 非支付中, 才会尝试返回
           printPageUIObject();
@@ -227,23 +246,23 @@ function start() {
 }
 
 function printPageUIObject() {
-  // TODO, 识别高峰期页面特征, 下面两个txt都是通用的特征, 看看id是否可以首先
-  // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
-  // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2
   textMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项text:" + child.text());
+      if (idx < 100)
+        log("第" + (idx + 1) + "项(" + child.depth() + ")text:" + child.text());
     });
   descMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项desc:" + child.desc());
+      if (idx < 100)
+        log("第" + (idx + 1) + "项(" + child.depth() + ")desc:" + child.desc());
     });
   idMatches(".+")
     .find()
     .forEach((child, idx) => {
-      log("第" + (idx + 1) + "项id:" + child.id());
+      if (idx < 100)
+        log("第" + (idx + 1) + "项(" + child.depth() + ")id:" + child.id());
     });
 }
 
@@ -296,7 +315,7 @@ function toastLogClip() {
   ui.run(function () {
     w.requestFocus();
     setTimeout(() => {
-      toastLog("请确认当前剪贴板内容为门牌号:[" + getClip() + "]");
+      toastLog("请确认当前门牌号为:[" + getClip() + "]");
       w.close();
     }, 500);
   });
@@ -771,7 +790,8 @@ function orderConfirm() {
           } else {
             console.log("商品[%s]因为库存不足失败, 加入黑名单", currentItemTxt);
             if (blackItemArr.indexOf(currentItemTxt) == -1) {
-              blackItemArr.push(currentItemTxt);
+              // 05/03 不再需要加入黑名单
+              // blackItemArr.push(currentItemTxt);
             }
           }
         }
@@ -837,7 +857,6 @@ function payConfirm() {
     musicNotify("06.need_pay");
     sleep(5000);
   }
-  blackItemArr;
 }
 
 function findActiveFilterItems() {
@@ -914,7 +933,7 @@ function itemSel() {
         console.error(e.stack);
       }
     } else {
-      // 220502 选择所有符合条件的商品 // 220428 随机选中某件可选商品
+      // 220502 选择所有符合条件的商品 //220428 随机选中某件可选商品
       //let randomIdx = random(0, activeItems.length - 1);
       for (let i = 0; i < activeItems.length; i++) {
         // 0, 全选所有商品
@@ -949,99 +968,75 @@ function itemSel() {
 /** 商品选择页处理逻辑 */
 function doInItemSel() {
   // text("小区提货点").exists()
-  log("当前在商品选择页面");
+  // log("当前在商品选择页面");
   isPaying = false;
   activeItemsSelected = false;
-  // let notServicePage = id("hema-floor-title-4732230300").findOne(1000).parent();
-  //console.time('商品列表页,确认状态耗时')
-  let specialPackageTxt = textMatches(
-    /立即下单|配送已约满|抢购结束|即将开售|已选.*/
-  ).findOne(4000);
-  //console.timeEnd('商品列表页,确认状态耗时')
-  if (specialPackageTxt) {
-    log("进入条件2:" + specialPackageTxt.text());
+  console.time("确认是否可下单 耗时");
+  let btn = textMatches(/(立即下单|配送已约满|抢购结束|即将开售)/).findOne(
+    4000
+  ); // S8大概 3500ms
+  console.timeEnd("确认是否可下单 耗时");
+  if (btn) {
+    log("进入条件2:" + btn.text());
+    // 记录 [立即下单]的坐标
+    submitOrderX = btn.bounds().centerX();
+    submitOrderY = btn.bounds().centerY();
     // 遍历所有的商品
-
     printAllItems();
-    //log("当前在营业时间");
-    // 220428 因为其实 [商品列表] 比 [立即下单] 按钮加载的更快, 考虑用第一个商品是否可购买来判断能否下单
-    console.time("判断是否可买并选中耗时");
-    let canBuy = true;
-    // if (
-    //   !specialPackageTxt.text().match("已选.*") ||
-    //   specialPackageTxt.text() == "已选0件"
-    // ) {
-    canBuy = itemSel(); // 由于已售完的物品也会在购物车里面, 但是又不可购买, 所以不能再通过这个条件进行判断
-    // }
-
-    console.timeEnd("判断是否可买并选中耗时");
-    if (canBuy && activeItemsSelected) {
-      console.time("确认是否可下单 耗时");
-      let btn = textMatches(/(立即下单|配送已约满|抢购结束|即将开售)/).findOne(
-        4000
-      ); // S8大概 3500ms
-      console.timeEnd("确认是否可下单 耗时");
-      // musicNotify
-      if (btn != null && btn.text() == "立即下单") {
-        // 记录 [立即下单]的坐标
-        submitOrderX = btn.bounds().centerX();
-        submitOrderY = btn.bounds().centerY();
+    if (btn.text() == "立即下单" || btn.text() == "即将开售") {
+      // 立即下单|即将开售, 这两种情况都可以添加商品, 所以现在不在只抢一件商品了
+      console.time("选中可买商品耗时");
+      itemSel(); // 由于已售完的物品也会在购物车里面, 但是又不可购买, 所以不能再通过这个条件进行判断
+      console.timeEnd("选中可买商品耗时");
+      if (activeItemsSelected && btn.text() == "立即下单") {
         // 默认是 [已选0件]
         let checkedTxt = textStartsWith("已选").findOne(1000);
         // log(checkedTxt);
         if (checkedTxt) {
-          if (checkedTxt.text() != "已选0件" && activeItemsSelected) {
+          if (checkedTxt.text() != "已选0件") {
             log("当前商品情况:" + checkedTxt.text());
-            let submitBtn = textMatches(
-              "立即下单|即将开售|配送已约满|抢购结束"
-            ).findOne(1000);
-            if (submitBtn && submitBtn.text() == "立即下单") {
-              // 这里是高峰期的核心操作
-              // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
-              // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
-              try {
-                while (submitBtn) {
-                  submitBtn.click();
-                  console.time("into_confirm_order 耗时");
-                  // 高峰期会出现 [确定] 按钮
-                  let confirmTxt = textMatches(
-                    /(当前购物高峰期.*|.*滑块完成验证.*|确认订单|确定)/
-                  ).findOne(5000);
-                  console.timeEnd("into_confirm_order 耗时");
-                  if (confirmTxt) {
-                    console.log(
-                      "点击[立即下单]后,进入条件3:" + confirmTxt.text()
-                    );
-                    if (confirmTxt.text() == "确定") {
-                      // [确认订单] - 温馨提示 - 前方拥挤, 亲稍等再试试 - [确定]
-                      console.log("发现[确定]按钮, 立即点击");
-                      clickByCoor(confirmTxt);
-                      back();
-                      commonWait();
-                    } else if (confirmTxt.text().indexOf("完成验证") != -1) {
-                      // 当前购物高峰期人数较多, 请稍后重试
-                      log("通过text查找到[%s]", page.text());
-                      musicNotify("05.need_manual");
-                      sleep(3000);
-                    } else {
-                      // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
-                    }
-                  } else {
-                    console.error("ERROR7: 既没有[确认订单], 也没有[确定]按钮");
-                    musicNotify("09.error");
+            let submitBtn = btn;
+            // 这里是高峰期的核心操作
+            // 点击  [立即下单] 之后, 高峰期会出现 [当前购物高峰期人数较多, 请您稍后再试] 的toast,
+            // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
+            try {
+              while (submitBtn) {
+                submitBtn.click();
+                console.time("into_confirm_order 耗时");
+                // 高峰期会出现 [确定] 按钮
+                let confirmTxt = textMatches(
+                  /(当前购物高峰期.*|.*滑块完成验证.*|确认订单|确定)/
+                ).findOne(5000);
+                console.timeEnd("into_confirm_order 耗时");
+                if (confirmTxt) {
+                  console.log(
+                    "点击[立即下单]后,进入条件3:" + confirmTxt.text()
+                  );
+                  if (confirmTxt.text() == "确定") {
+                    // [确认订单] - 温馨提示 - 前方拥挤, 亲稍等再试试 - [确定]
+                    console.log("发现[确定]按钮, 立即点击");
+                    clickByCoor(confirmTxt);
                     back();
                     commonWait();
+                  } else if (confirmTxt.text().indexOf("完成验证") != -1) {
+                    // 当前购物高峰期人数较多, 请稍后重试
+                    log("通过text查找到[%s]", page.text());
+                    musicNotify("05.need_manual");
+                    sleep(3000);
+                  } else {
+                    // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
                   }
-                  submitBtn = text("立即下单").findOne(100);
+                } else {
+                  console.error("ERROR7: 既没有[确认订单], 也没有[确定]按钮");
+                  musicNotify("09.error");
+                  back();
+                  commonWait();
                 }
-                log("[立即下单]已经往下流转");
-              } catch (e) {
-                console.error(e.stack);
+                submitBtn = text("立即下单").findOne(100);
               }
-            } else {
-              // 可能是 即将开售|配送已约满|抢购结束
-              console.error("ERROR8: 没有找到[立即下单]按钮");
-              musicNotify("09.error");
+              log("[立即下单]已经往下流转");
+            } catch (e) {
+              console.error(e.stack);
             }
           } else {
             console.log("没有符合要求的商品, 即将返回首页");
@@ -1051,21 +1046,28 @@ function doInItemSel() {
         } else {
           console.error("异常情况6, 没有找到[已选*件]文本");
           musicNotify("09.error");
+          back();
+          commonWait();
         }
       } else {
-        log("没有找到[立即下单], 即将返回首页");
+        log("没有找到[立即下单]或者没有需要的商品, 即将返回首页");
         back();
         commonWait();
       }
     } else {
-      log("无商品可购买, 即将返回首页");
+      if (btn.text() == "抢购结束") {
+        log("[抢购结束]");
+        isFailed = true;
+      } else {
+        log("[配送已约满]");
+      }
       back();
       commonWait();
     }
   } else {
     // 08:00 - 18:00
-    log("WARN: 当前无商品可购买");
-    isFailed = true;
+    log("ERROR8: 购物车内按钮未知情况");
+    // isFailed = true;
     back();
     commonWait();
   }
@@ -1097,7 +1099,7 @@ function doInHome() {
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
     let mall = textMatches(
-      /(抢购结束|小区提货点|立即下单|配送已约满|O1CN011FpVIT1g4oGMqe.*)/
+      /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN011FpVIT1g4oGMqe.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
