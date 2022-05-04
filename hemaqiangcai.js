@@ -51,6 +51,9 @@ var submitOrderY;
 
 var activeItemsSelected = false;
 
+// 配置对象, json格式
+var config;
+
 // 调试期间临时使用, 关闭其他脚本
 engines.all().map((ScriptEngine) => {
   log("engines.myEngine().toString():" + engines.myEngine().toString());
@@ -268,15 +271,15 @@ function getConfig() {
   // 获取配置文件的内容进行覆盖
   if (files.exists("./config.js")) {
     log("存在配置文件:./config.js");
-    let config = require("./config.js");
+    config = require("./config.js");
     log("配置项为: ", config);
     itemFilterStr = config.itemFilterStr;
     buyMode = config.buyMode;
     if (config.address) {
-      setClip(config.address);
+      // setClip(config.address);
     }
   }
-  toastLogClip();
+  // toastLogClip();
 }
 
 // 关闭闹钟提醒
@@ -650,21 +653,25 @@ function inputAddress() {
           child.text() == "" ||
           child.text() == "例：8号楼808室"
         ) {
-          //toastLog("请手工输入第" + (idx + 1) + "项内容");
-          //sleep(3000);
-          log("选中地址输入框");
-          clickByCoor(child);
-          log("粘贴剪贴板内容");
-          child.paste();
-          sleep(50);
-          log("触发[返回], 关闭输入框");
-          back();
-          commonWait();
-          // 220428, 测试粘贴剪贴板可以成功
+          // log("选中地址输入框");
+          // clickByCoor(child);
+          // log("粘贴剪贴板内容");
+          // // 220428, 测试粘贴剪贴板可以成功
+          // child.paste();
+          // sleep(50);
+          // log("触发[返回], 关闭输入框");
+          // back();
+          // 05/04 Note9 可以直接使用 setText 方法
+          child.setText(config.address);
+          commonWait();          
           isSetVal = true;
         } else {
           log("当前地址为:[%s]", child.text());
           addressIsError = false;
+        }
+      } else if (idx == 1) {
+        if (config.phone) {
+          child.setText(config.phone);
         }
       }
     });
@@ -702,41 +709,40 @@ function inputAddress() {
 
 function orderConfirm() {
   log("进入[确认订单]第二部分");
-  let addressIsError = inputAddress();
-  if (!addressIsError) {
-    let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(1000);
-    if (totalAmount) {
-      log("金额:" + totalAmount.text());
-      if (totalAmount.text() == "￥0.00") {
-        // 这种情况一般就是有缓存了, 光退回团购页面还不行, 需要返回首页
-        log("当前订单总金额:" + totalAmount.text());
-        // 库存不足 -> [失效原因:] 抱歉, 您选的商品太火爆了, 一会儿功夫库存不足了(008)
-        // 运力不足 -> [失效原因:] 非常抱歉, 当前商品运力不足(063)
-        let failReason =
-          textMatches(/(.*运力不足.*|.*库存不足.*)/).findOne(200);
-        if (failReason) {
-          if (failReason.text().indexOf("运力不足") != -1) {
-            for (let i = 0; i < 20; i++) {
-              if (i % 20 == 1) {
-                musicNotify("04.no_express");
-              }
-              toastLog("运力不足,等待" + (20 * 3 - i * 3) + "秒后重试");
-              sleep(3 * 1000);
+  let totalAmount = textMatches(/(￥\d+\.\d{1,2})/).findOne(1000);
+  if (totalAmount) {
+    log("金额:" + totalAmount.text());
+    if (totalAmount.text() == "￥0.00") {
+      // 这种情况一般就是有缓存了, 光退回团购页面还不行, 需要返回首页
+      log("当前订单总金额:" + totalAmount.text());
+      // 库存不足 -> [失效原因:] 抱歉, 您选的商品太火爆了, 一会儿功夫库存不足了(008)
+      // 运力不足 -> [失效原因:] 非常抱歉, 当前商品运力不足(063)
+      let failReason = textMatches(/(.*运力不足.*|.*库存不足.*)/).findOne(200);
+      if (failReason) {
+        if (failReason.text().indexOf("运力不足") != -1) {
+          for (let i = 0; i < 20; i++) {
+            if (i % 20 == 1) {
+              musicNotify("04.no_express");
             }
-          } else {
-            console.log("商品[%s]因为库存不足失败, 加入黑名单", currentItemTxt);
-            if (blackItemArr.indexOf(currentItemTxt) == -1) {
-              // 05/03 不再需要加入黑名单
-              // blackItemArr.push(currentItemTxt);
-            }
+            toastLog("运力不足,等待" + (20 * 3 - i * 3) + "秒后重试");
+            sleep(3 * 1000);
+          }
+        } else {
+          console.log("商品[%s]因为库存不足失败, 加入黑名单", currentItemTxt);
+          if (blackItemArr.indexOf(currentItemTxt) == -1) {
+            // 05/03 不再需要加入黑名单
+            // blackItemArr.push(currentItemTxt);
           }
         }
-        back();
-        commonWait();
-        commonWait();
-        back();
-        commonWait();
-      } else {
+      }
+      back();
+      commonWait();
+      commonWait();
+      back();
+      commonWait();
+    } else {
+      let addressIsError = inputAddress();
+      if (!addressIsError) {
         // 有金额了就认为是支付中, 如果失败返回了首页, 再重置为false
         let confirmBtn = textMatches(/(提交订单|确认付款)/).findOne(500);
         musicNotify("02.pay");
@@ -768,13 +774,13 @@ function orderConfirm() {
           }
           commonWait();
         }
+      } else {
+        log("收货地址未输入, 稍后重试");
       }
-    } else {
-      console.error("ERROR6 没有找到金额");
-      musicNotify("09.error");
     }
   } else {
-    log("收货地址未输入, 稍后重试");
+    console.error("ERROR6 没有找到金额");
+    musicNotify("09.error");
   }
 }
 
