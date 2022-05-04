@@ -131,9 +131,11 @@ function start() {
       } else if (page.text() == "确认付款") {
         payConfirm();
       } else if (page.text() == "确定") {
+        // [温馨提示] - [当前购物高峰期人数较多, 请您稍后再试] - [确定]
         // 系统提示, 点掉即可
         click_i_know();
         // 提交订单页面的 确定 提示, 点击以后不会自动返回
+        log("执行[返回]操作");
         back();
         commonWait();
       } else if (page.text() == "困鱼" || page.text() == "日志") {
@@ -740,12 +742,13 @@ function orderConfirm() {
         commonWait();
       } else {
         // 有金额了就认为是支付中, 如果失败返回了首页, 再重置为false
-        let confirmBtn = text("提交订单|确认付款").findOne(1000);
-        if (confirmBtn) {
-          musicNotify("02.pay");
+        let confirmBtn = textMatches(/(提交订单|确认付款)/).findOne(500);
+        musicNotify("02.pay");
+        if (confirmBtn) {          
           if (confirmBtn.text() == "提交订单") {
             console.info("INFO: 点击[" + confirmBtn.text() + "]");
             confirmBtn.click();
+            // 点击之后, 进入 [载入中] 过渡动画, [支付宝] 过渡动画, 最终出现 [确认付款] 按钮
             commonWait();
             click_i_know();
             // 提交订单页面的 确定 提示, 点击以后不会自动返回
@@ -757,7 +760,6 @@ function orderConfirm() {
           }
         } else {
           printPageUIObject();
-          musicNotify("02.pay");
           // 在输入信息的时候会挡住按钮
           if (submitOrderX && submitOrderY) {
             log(
@@ -908,12 +910,12 @@ function doInItemSel() {
         // 运气好的话, 进入过渡页面, [确认订单] 的 [载入中], 所以通过确认订单判断也应该可以
         try {
           while (submitBtn) {
-            submitBtn.click();
             console.time("into_confirm_order 耗时");
+            submitBtn.click();
             // 高峰期会出现 [确定] 按钮
             let confirmTxt = textMatches(
               /(当前购物高峰期.*|.*滑块完成验证.*|确认订单|确定)/
-            ).findOne(5000);
+            ).findOne(5000); //高峰期大约200ms
             console.timeEnd("into_confirm_order 耗时");
             if (confirmTxt) {
               console.log("点击[立即下单]后,进入条件3:" + confirmTxt.text());
@@ -929,6 +931,7 @@ function doInItemSel() {
                 musicNotify("05.need_manual");
                 sleep(3000);
               } else {
+                // 05/04 到达了确定订单页面, 但是还有确定按钮, 这种情况也要重试, 交给后续流程处理
                 // 当前购物高峰期 , 确认订单 这两个页面,都无需处理, 也无需等待
               }
             } else {
@@ -994,13 +997,15 @@ function doInHome() {
     let loc = toListBtn.bounds();
     // 必须要等待超过300ms, 否则点击会无效, 无法进入[商品选择]页面
     commonWait();
-    sleep(200);
+    // 05/04 高峰期可能加载更慢, 增加延时100ms至300ms
+    sleep(300);
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
     let mall = textMatches(
       /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN01CYtPWu1.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
+    // TODO, 排查false的问题
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
     log("没有找到进入团购的按钮");
