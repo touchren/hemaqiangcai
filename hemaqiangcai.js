@@ -549,12 +549,13 @@ function getItemInfo(v) {
 
 /**
  * 获得第一个商品的标题位置UIObject
+ * 05/04 高峰期商品会加载不出来, 调整超时到1秒
  */
 function findFirstItem() {
   let item1 = className("android.view.View")
     .depth(18)
     .textMatches(/(.+)/)
-    .findOne(10000);
+    .findOne(1000);
   return item1;
 }
 
