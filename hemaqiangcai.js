@@ -121,7 +121,10 @@ function start() {
       /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|盒区团购|确认订单|确认付款|订单详情|加载失败|我的订单|困鱼|日志|O1CN01CYtPWu1.*)/
     ).findOne(4000);
     if (page) {
-      log("进入条件1:[" + page.text() + "]");
+      if (page.text() != "日志") {
+        // 不能打印, 否则日志会刷屏
+        log("进入条件1:[" + page.text() + "]");
+      }
       if (page.text() == "盒区团购") {
         // 购物车
         doInItemSel();
@@ -278,6 +281,8 @@ function getConfig() {
     if (config.address) {
       // setClip(config.address);
     }
+    toastLog("手机号:[" + config.phone + "],门牌号[" + config.address + "]");
+    sleep(2000);
   }
   // toastLogClip();
 }
@@ -663,7 +668,7 @@ function inputAddress() {
           // back();
           // 05/04 Note9 可以直接使用 setText 方法
           child.setText(config.address);
-          commonWait();          
+          commonWait();
           isSetVal = true;
         } else {
           log("当前地址为:[%s]", child.text());
@@ -753,6 +758,9 @@ function orderConfirm() {
             // 点击之后, 进入 [载入中] 过渡动画, [支付宝] 过渡动画, 最终出现 [确认付款] 按钮
             commonWait();
             click_i_know();
+            console.time("跳转到支付宝耗时");
+            text("支付宝").findOne(3000);
+            console.timeEnd("跳转到支付宝耗时");
           } else {
             // 确认付款
             payConfirm();
@@ -760,18 +768,18 @@ function orderConfirm() {
         } else {
           printPageUIObject();
           // 在输入信息的时候会挡住按钮
-          if (submitOrderX && submitOrderY) {
-            log(
-              "直接点击[提交订单]对应的坐标[%s,%s]",
-              submitOrderX,
-              submitOrderY
-            );
-            click(submitOrderX, submitOrderY);
-          } else {
-            console.error("没有缓存到[提交订单]的坐标");
-            console.error("ERROR5 未知情况");
-            musicNotify("09.error");
-          }
+          // if (submitOrderX && submitOrderY) {
+          //   log(
+          //     "直接点击[提交订单]对应的坐标[%s,%s]",
+          //     submitOrderX,
+          //     submitOrderY
+          //   );
+          //   click(submitOrderX, submitOrderY);
+          // } else {
+          //   console.error("没有缓存到[提交订单]的坐标");
+          //   console.error("ERROR5 未知情况");
+          //   musicNotify("09.error");
+          // }
           commonWait();
         }
       } else {
