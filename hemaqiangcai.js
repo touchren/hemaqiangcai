@@ -144,34 +144,13 @@ function start() {
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
         // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
         //log("[返回]图标depth:%s", page.depth());
-        //console.time("确认进入购物车耗时");
-        let temp = textMatches(/(盒区团购|O1CN01CYtPWu1MUBqQAUK9D.*)/).findOne(
-          1000
-        );
-        //console.timeEnd("确认进入购物车耗时");
-        if (temp) {
-          if (temp.text() == "盒区团购") {
-            // 大概耗时 60ms
-            // console.log("进入购物车");
-            // 购物车, 盒区团购
-            doInItemSel();
-          } else if (temp.depth() == 13) {
-            console.log(
-              "出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页"
-            );
-            back();
-            commonWait();
-          } else {
-            console.error("ERROR-04: 无法判断在哪个页面");
-            printPageUIObject();
-            sleep(2000);
-            back();
-            commonWait();
-          }
+        if (temp.depth() == 13) {
+          console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
+          back();
+          commonWait();
         } else {
-          console.error("ERROR-01: 无法判断在哪个页面");
+          console.error("ERROR-04: 无法判断在哪个页面");
           printPageUIObject();
-          //musicNotify("09.error");
           sleep(2000);
           back();
           commonWait();
@@ -887,6 +866,7 @@ function itemSel() {
       commonWait();
     }
   } else {
+    // 05/04 这种情况是因为高峰期, 下面的商品列表加载不出来
     log("[商品未上架]");
   }
 }
@@ -1017,7 +997,7 @@ function doInHome() {
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
     let mall = textMatches(
-      /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN011FpVIT1g4oGMqe.*)/
+      /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN01CYtPWu1.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     log("成功进入[商品列表]页面:" + (mall != null));
