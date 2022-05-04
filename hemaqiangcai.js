@@ -71,7 +71,7 @@ unlock();
 getConfig();
 
 // 开始循环执行
-while (round < MAX_ROUND) {
+while (round < MAX_ROUND && !isSuccessed) {
   round++;
   log("开始第" + round + "轮抢菜");
   try {
@@ -96,7 +96,7 @@ while (round < MAX_ROUND) {
     sleep(secondPerTime * 1000);
   }
 }
-toastLog("程序结束");
+toastLog("程序结束", isSuccessed ? ",请修改商品关键字" : "");
 
 function start() {
   count = 0;
@@ -131,13 +131,8 @@ function start() {
       } else if (page.text() == "确认付款") {
         payConfirm();
       } else if (page.text() == "确定") {
-        // [温馨提示] - [当前购物高峰期人数较多, 请您稍后再试] - [确定]
         // 系统提示, 点掉即可
-        click_i_know();
-        // 提交订单页面的 确定 提示, 点击以后不会自动返回
-        log("执行[返回]操作");
-        back();
-        commonWait();
+        click_i_know(page);
       } else if (page.text() == "困鱼" || page.text() == "日志") {
         waitCheckLog();
       } else if (page.text().indexOf("O1CN01CYtPWu1") != -1) {
@@ -448,6 +443,7 @@ function filterActiveItem(item) {
     } else if (imageDivs.size() == 4) {
       // 认为已经有商品选中了
       activeItemsSelected = true;
+      console.info("已选中且有货商品[%s]", item.text());
       // 有货, 并且被选中, 所以不需要再选择了, 设置为不可选中, 避免再次点击
       isActive = false;
     } else if (imageDivs.size() == 5) {
@@ -744,16 +740,13 @@ function orderConfirm() {
         // 有金额了就认为是支付中, 如果失败返回了首页, 再重置为false
         let confirmBtn = textMatches(/(提交订单|确认付款)/).findOne(500);
         musicNotify("02.pay");
-        if (confirmBtn) {          
+        if (confirmBtn) {
           if (confirmBtn.text() == "提交订单") {
             console.info("INFO: 点击[" + confirmBtn.text() + "]");
             confirmBtn.click();
             // 点击之后, 进入 [载入中] 过渡动画, [支付宝] 过渡动画, 最终出现 [确认付款] 按钮
             commonWait();
             click_i_know();
-            // 提交订单页面的 确定 提示, 点击以后不会自动返回
-            back();
-            commonWait();
           } else {
             // 确认付款
             payConfirm();
@@ -834,7 +827,7 @@ function itemSel() {
     let activeItems = findActiveFilterItems();
     if (activeItems.length == 0) {
       try {
-        console.info("INFO: 没有可购买的符合条件的商品");
+        console.info("INFO: 没有未选中的符合条件的可购买的商品");
         // 05/03 实际上后面除了调试外, 不太可能需要自动选择第一件商品了
         if (buyMode == 0) {
           toastLog("INFO 没有符合条件的可选商品, 下单第一件" + first.text());
@@ -1019,13 +1012,53 @@ function commonWait() {
   sleep(COMMON_SLEEP_TIME_IN_MILLS + random(0, 50));
 }
 
-function click_i_know() {
-  // 只要页面有 我知道了等按钮, 都盲点
-  let retry_button = textMatches(/(我知道了|返回购物车|确定)/).findOne(100);
-  if (retry_button) {
-    log("通用方法:找到[" + retry_button.text() + "]按钮,直接点击");
-    clickByCoor(retry_button);
+function click_i_know(iKnow) {
+  // [温馨提示] - [当前购物高峰期人数较多, 请您稍后再试] - [确定] - 需要[返回]
+  // [温馨提示] - [抱歉, 您选的商品太火爆了, 一会儿功夫库存不足了(008)] - [确定] - 不确定是否要返回
+  // [温馨提示] - [前方拥挤, 亲稍等再试试] - [确定] - 应该不需要[返回]
+  let retry_button = iKnow;
+  if (retry_button == null) {
+    retry_button == textMatches(/(我知道了|返回购物车|确定)/).findOne(100);
   }
+  if (retry_button) {
+    let reason = printReason(retry_button);
+    log(
+      "通用方法:找到[" + retry_button.text() + "]按钮,原因[%s],直接点击",
+      reason
+    );
+    clickByCoor(retry_button);
+    if (reason.indexOf("请您稍后再试") != -1) {
+      // 提交订单页面的 确定 提示, 点击以后不会自动返回
+      log("执行[返回]操作");
+      back();
+      commonWait();
+    }
+  }
+}
+
+function printReason(iKnow) {
+  let needPrint = true;
+  let reason = "";
+  iKnow
+    .parent()
+    .parent()
+    .parent()
+    .find(textMatches(".+"))
+    .forEach((child, idx) => {
+      if (needPrint) {
+        if (child.text() != "订单已约满") {
+          log(
+            "第" + (idx + 1) + "项(" + child.depth() + ")text:" + child.text()
+          );
+        } else {
+          needPrint = false;
+        }
+      }
+      if (idx == 1) {
+        reason = child.text();
+      }
+    });
+  return reason;
 }
 
 function kill_app(packageName) {
