@@ -3,6 +3,8 @@
 const APP_NAME = "盒马";
 const PACKAGE_NAME = "com.wudaokou.hippo";
 const AUTO_JS_PACKAGE_NAME = "com.taobao.idlefish.x";
+// 配置文件的相对路径
+const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
 const MAX_ROUND = 10;
 // 每轮最长重试次数 (平均单次5秒,300次约25分钟)
@@ -147,7 +149,7 @@ function start() {
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
         // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
         //log("[返回]图标depth:%s", page.depth());
-        if (temp.depth() == 13) {
+        if (page.depth() == 13) {
           console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
           back();
           commonWait();
@@ -272,9 +274,9 @@ function printPageUIObject() {
 
 function getConfig() {
   // 获取配置文件的内容进行覆盖
-  if (files.exists("./config.js")) {
-    log("存在配置文件:./config.js");
-    config = require("./config.js");
+  if (files.exists(CONFIG_PATH)) {
+    log("存在配置文件: ", CONFIG_PATH);
+    config = require(CONFIG_PATH);
     log("配置项为: ", config);
     itemFilterStr = config.itemFilterStr;
     buyMode = config.buyMode;
@@ -756,11 +758,22 @@ function orderConfirm() {
             console.info("INFO: 点击[" + confirmBtn.text() + "]");
             confirmBtn.click();
             // 点击之后, 进入 [载入中] 过渡动画, [支付宝] 过渡动画, 最终出现 [确认付款] 按钮
+            // [支付宝] 之后, 设置过的手机会自动 [免密支付中] , [免密支付成功] ,
+            // 最终 [支付成功] , 有 [完成] (Note9上面与录音的停止键位置重叠), [返回首页]
             commonWait();
             click_i_know();
             console.time("跳转到支付宝耗时");
-            text("支付宝").findOne(3000);
+            let checkTxt = textMatches(
+              "(载入中|支付宝|免密支付中|免密支付成功|确定)"
+            ).findOne(3000);
             console.timeEnd("跳转到支付宝耗时");
+            if (checkTxt) {
+              log("进入条件6:", checkTxt.text());
+              if (checkTxt.text() != "确定") {
+                console.info("订单正在自动支付中, 等待一定时间");
+                sleep(5000);
+              }
+            }
           } else {
             // 确认付款
             payConfirm();
@@ -1046,6 +1059,9 @@ function click_i_know(iKnow) {
       log("执行[返回]操作");
       back();
       commonWait();
+    } else {
+      // 05/05 [前方拥挤, 亲稍等再试试], 这种情况下, 会自动返回[盒区团购]页面
+      log("不执行[返回]操作");
     }
   }
 }
