@@ -12,7 +12,7 @@ const MAX_TIMES_PER_ROUND = 300;
 // 点击按钮之后的通用等待时间
 const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
-const ACTIVE_STOP_APP = 0;
+const ACTIVE_STOP_APP = 1;
 
 // 第几轮
 var round = 0;
@@ -352,8 +352,9 @@ function musicNotify(name) {
   try {
     if (!files.exists(m)) {
       // 如果无法访问, 大概耗时2.5s, 将来准备换成公网地址
+      // http://192.168.6.16/apk/autojs/tts/Download/
       var res = http.get(
-        "http://192.168.6.16/apk/autojs/tts/Download/" + name + ".mp3"
+        "https://raw.fastgit.org/touchren/meituanmaicai/main/tts/Download/" + name + ".mp3"
       );
       if (res.statusCode == 200) {
         files.writeBytes(m, res.body.bytes());
@@ -764,7 +765,7 @@ function orderConfirm() {
             click_i_know();
             console.time("跳转到支付宝耗时");
             let checkTxt = textMatches(
-              "(载入中|支付宝|免密支付中|免密支付成功|确定)"
+              "(支付宝|免密支付中|免密支付成功|确定)"
             ).findOne(3000);
             console.timeEnd("跳转到支付宝耗时");
             if (checkTxt) {
@@ -848,7 +849,7 @@ function itemSel() {
   // log("first: ", first);
   // 如果有运力的情况下, 第一个商品肯定可购买的, 今日售完的商品会排在后面
   if (filterActiveItem(first)) {
-    toastLog("[商品已上架]");
+    log("[商品已上架]");
     console.info("黑名单商品名单: ", blackItemArr);
     // 1, 首先获取所有符合条件的商品
     let activeItems = findActiveFilterItems();
