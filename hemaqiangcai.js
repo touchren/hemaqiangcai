@@ -1102,7 +1102,9 @@ function kill_app(packageName) {
     }
   }
   app.openAppSetting(name);
+  commonWait();
   text(app.getAppName(name)).waitFor();
+  sleep(300);
   let is_sure = textMatches(/(.*强.*|.*停.*|.*结.*|.*行.*|.*FORCE.*)/).findOne(
     3000
   );
@@ -1110,20 +1112,22 @@ function kill_app(packageName) {
   if (is_sure.enabled()) {
     is_sure.click();
     commonWait();
+    commonWait();
     buttons = textMatches(
       /(.*强.*|.*停.*|.*结.*|.*行.*|确定|是|.*FORCE.*)/
     ).find();
     if (buttons.length > 0) {
       buttons[buttons.length - 1].click();
       commonWait();
+      commonWait();
     } else {
       // 异常情况
       toast(app.getAppName(name) + "应用没有找到确认按钮");
-      sleep(50000);
+      sleep(30000);
     }
 
     log(app.getAppName(name) + "应用已被关闭");
-    sleep(1000);
+    sleep(500);
     back();
   } else {
     log(app.getAppName(name) + "应用不能被正常关闭或不在后台运行");
