@@ -123,7 +123,7 @@ function start() {
       /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|盒区团购|确认订单|确认付款|订单详情|加载失败|我的订单|困鱼|日志|O1CN01CYtPWu1.*)/
     ).findOne(4000);
     if (page) {
-      if (page.text() != "日志") {
+      if (page.text() != "日志" && page.text() != "困鱼") {
         // 不能打印, 否则日志会刷屏
         log("进入条件1:[" + page.text() + "]");
       }
@@ -214,7 +214,11 @@ function start() {
 
     // 太容易阻碍操作了
     let packageName = currentPackage();
-    if (packageName != PACKAGE_NAME && packageName != AUTO_JS_PACKAGE_NAME) {
+    if (
+      packageName != PACKAGE_NAME &&
+      packageName != AUTO_JS_PACKAGE_NAME &&
+      packageName != "com.android.systemui"
+    ) {
       interruptCount++;
       toastLog(
         "WANR: 页面已经被切至:" +
@@ -232,6 +236,8 @@ function start() {
         commonWait();
         commonWait();
       }
+    } else {
+      interruptCount = 0;
     }
   }
   toastLog(
@@ -301,7 +307,15 @@ function closeClock() {
     commonWait();
     sleep(500);
   } else {
-    log("没有识别出闹钟按钮");
+    // log("闹钟可能是弹窗状态");
+    // printPageUIObject();
+    // let stopClockBtn = text("停止").findOne(100);
+    // if (stopClockBtn) {
+    //   stopClockBtn.click();
+    //   commonWait();
+    // } else {
+      log("没有识别出闹钟按钮");
+    // }
   }
 }
 
@@ -354,7 +368,9 @@ function musicNotify(name) {
       // 如果无法访问, 大概耗时2.5s, 将来准备换成公网地址
       // http://192.168.6.16/apk/autojs/tts/Download/
       var res = http.get(
-        "https://raw.fastgit.org/touchren/meituanmaicai/main/tts/Download/" + name + ".mp3"
+        "https://raw.fastgit.org/touchren/meituanmaicai/main/tts/Download/" +
+          name +
+          ".mp3"
       );
       if (res.statusCode == 200) {
         files.writeBytes(m, res.body.bytes());
