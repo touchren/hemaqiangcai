@@ -1,4 +1,5 @@
 // 05/03 实测 三星Note20u, Android12, 不支持这个脚本, 界面布局层次, id,depth等都不一样, 还要额外进行适配
+// 盒马的放货时间并不固定为08:00整, 会提前个1-2分钟
 // 常量定义
 const APP_NAME = "盒马";
 const PACKAGE_NAME = "com.wudaokou.hippo";
@@ -6,13 +7,15 @@ const AUTO_JS_PACKAGE_NAME = "com.taobao.idlefish.x";
 // 配置文件的相对路径
 const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
-const MAX_ROUND = 10;
-// 每轮最长重试次数 (平均单次5秒,300次约25分钟)
-const MAX_TIMES_PER_ROUND = 300;
+const MAX_ROUND = 6;
+// 每轮最长重试次数 (300次约8分钟)
+const MAX_TIMES_PER_ROUND = 500;
 // 点击按钮之后的通用等待时间
 const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
-const ACTIVE_STOP_APP = 0;
+const ACTIVE_STOP_APP = 1;
+// 开卖时间
+const SALE_BEGIN_TIME = ["08:00","12:00"];
 
 // 第几轮
 var round = 0;
@@ -101,7 +104,8 @@ while (round < MAX_ROUND && !isSuccessed) {
     sleep(secondPerTime * 1000);
   }
 }
-toastLog("程序结束", isSuccessed ? ",请修改商品关键字" : "");
+home();
+toastLog("程序已结束");
 
 function start() {
   count = 0;
@@ -121,7 +125,7 @@ function start() {
     // 图片text O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2
     // 第2项(10)text:O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|确定|搜索|我常买|爱一起 尽享当夏|确认订单|确认付款|正在付款.*|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g.*)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|立即下载|确定|搜索|我常买|爱一起 尽享当夏|确认订单|确认付款|正在付款.*|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g.*)/
     ).findOne(4000);
     if (page) {
       if (page.text() != "日志" && page.text() != "困鱼") {
@@ -148,6 +152,11 @@ function start() {
       } else if (page.text() == "确定") {
         // 系统提示, 点掉即可
         click_i_know(page);
+      } else if (page.text() == "立即下载") {
+        // 程序升级提醒
+        log("执行返回19");
+        back();
+        commonWait();
       } else if (page.text() == "困鱼" || page.text() == "日志") {
         waitCheckLog();
       } else if (page.text().indexOf("O1CN011FpVIT1g") != -1) {
@@ -907,11 +916,15 @@ function doInCart() {
         // 3. 订单已约满 (这种情况可能会等比较长时间才返回)
         // |提交订单
         let nextBtn = textMatches(
-          /(我知道了|返回购物车|前方拥堵.*|确认订单|￥[0-2]{1}\d:\d{2}-[0-2]{1}\d:\d{2})/
+          /(我知道了|返回购物车|确定|前方拥堵.*|确认订单|￥[0-2]{1}\d:\d{2}-[0-2]{1}\d:\d{2})/
         ).findOne(5000);
         if (nextBtn) {
           log("进入条件6: ", nextBtn.text());
-          if (nextBtn.text() == "我知道了" || nextBtn.text() == "返回购物车") {
+          if (
+            nextBtn.text() == "我知道了" ||
+            nextBtn.text() == "返回购物车" ||
+            nextBtn.text() == "确定"
+          ) {
             console.time("点击->01[" + nextBtn.text() + "]耗时");
             printReason(nextBtn);
             nextBtn.parent().click();
@@ -928,15 +941,7 @@ function doInCart() {
             sleep(600);
           } else {
             // 立即支付|极速支付|20:00-22:00
-            log("没有出现我知道了等失败信息");
-            // sleep(1000);
-            // if (textStartsWith("放弃机会").exists()) {
-            //   toast("跳过加购");
-            //   textStartsWith("放弃机会").findOnce().parent().click();
-            //   commonWait();
-            // } else {
-            //   // 没有出现加购
-            // }
+            log("没有出现[我知道了|确定]等失败信息");
           }
         } else {
           console.error("ERROR7: 未知情况");
@@ -1309,8 +1314,10 @@ function kill_app(packageName) {
     }
   }
   app.openAppSetting(name);
-  commonWait();
+
   text(app.getAppName(name)).waitFor();
+  commonWait();
+  commonWait();
   sleep(300);
   let is_sure = textMatches(/(.*强.*|.*停.*|.*结.*|.*行.*|.*FORCE.*)/).findOne(
     3000
@@ -1334,7 +1341,7 @@ function kill_app(packageName) {
     }
 
     log(app.getAppName(name) + "应用已被关闭");
-    sleep(1500);
+    sleep(2000);
     log("执行返回9");
     back();
   } else {
