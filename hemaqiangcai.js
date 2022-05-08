@@ -15,7 +15,7 @@ const COMMON_SLEEP_TIME_IN_MILLS = 150;
 // 是否先强行停止APP
 const ACTIVE_STOP_APP = 1;
 // 开卖时间
-const SALE_BEGIN_TIME = ["08:00","12:00"];
+const SALE_BEGIN_TIME = ["08:00", "12:00"];
 
 // 第几轮
 var round = 0;
@@ -44,10 +44,19 @@ var itemFilterStr;
 // 任务中断次数
 var interruptCount = 0;
 
-// 当前正在下单的商品
+// 是否启动录屏
+var activeRecord = 0;
+
+// 是否启动高峰期录屏(准点开售)
+var activePeakRecord = 1;
+
+// 是否在录屏中
+var isRecording = false;
+
+// 当前正在下单的商品 (弃用)
 var currentItemTxt;
 
-// 黑名单列表 (主要是无货) - 0503 已经弃用
+// 黑名单列表 (主要是无货) - (0503 已经弃用)
 var blackItemArr = new Array();
 
 // [立即下单] 和 [提交订单] 的 中心坐标都与对方重叠, 填写 门牌号 的时候, 会获取不到 [提交订单] 对象, 使用[立即下单] 替代
@@ -108,6 +117,7 @@ home();
 toastLog("程序已结束");
 
 function start() {
+  startRecord();
   count = 0;
   isFailed = false;
   isSuccessed = false;
@@ -121,11 +131,13 @@ function start() {
   }
 
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
+    if (activePeakRecord == 1) {
+      checkSaleTime();
+    }
     // 返回按钮图标 TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
-    // 图片text O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2
     // 第2项(10)text:O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|立即下载|确定|搜索|我常买|爱一起 尽享当夏|确认订单|确认付款|正在付款.*|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g.*)/
+      /(.*请稍后重试.*|.*滑块完成验证.*|立即下载|确定|搜索|我常买|加入购物车|到货提醒|爱一起 尽享当夏|确认订单|确认付款|正在付款.*|使用密码|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g4o.*)/
     ).findOne(4000);
     if (page) {
       if (page.text() != "日志" && page.text() != "困鱼") {
@@ -146,13 +158,16 @@ function start() {
         doInSubmit();
       } else if (page.text() == "确认付款") {
         payConfirm();
-      } else if (page.text().indexOf("正在付款") != -1) {
+      } else if (
+        page.text().indexOf("正在付款") != -1 ||
+        page.text().indexOf("使用密码") != -1
+      ) {
         // 付款的中间状态, 交由后续流程处理
         sleep(5000);
       } else if (page.text() == "确定") {
         // 系统提示, 点掉即可
         click_i_know(page);
-      } else if (page.text() == "立即下载") {
+      } else if (page.text() == "立即下载" || page.text() == "加入购物车" || page.text() == "到货提醒") {
         // 程序升级提醒
         log("执行返回19");
         back();
@@ -163,7 +178,6 @@ function start() {
         // 05/03 识别高峰期页面特征, 下面两个txt都是通用的特征
         // depth == 14 都是
         // TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48 (05/03 确认是返回按钮, depth 14, 除了大小略有差异外, 与商品页面的[<]完全一致)
-        // O1CN01CYtPWu1MUBqQAUK9D_!!6000000001437-2-tps-2-2 (这个text太多, 购物车的图片都有这个属性)
         //log("[返回]图标depth:%s", page.depth());
         if (page.depth() == 10) {
           console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
@@ -234,7 +248,7 @@ function start() {
           }
         } else {
           log("可能页面加载失败");
-          log("执行返回18");
+          log("执行返回20");
           back();
           commonWait();
         }
@@ -279,6 +293,102 @@ function start() {
       ", isSuccessed:" +
       isSuccessed
   );
+  stopRecord();
+}
+
+function checkSaleTime() {
+  let nextTime = new Date(new Date().getTime() + 60 * 1000);
+  let hour = nextTime.getHours();
+  if (hour < 10) {
+    hour = "0" + hour;
+  }
+  let minute = nextTime.getMinutes();
+  if (minute < 10) {
+    minute = "0" + minute;
+  }
+  var second = nextTime.getSeconds();
+  let nextTimeStr = hour + ":" + minute;
+  if (SALE_BEGIN_TIME.indexOf(nextTimeStr) != -1) {
+    // 1分钟 之后开始销售
+    toastLog("还有[%s]秒开放下单", 60 - second);
+    if (second < 30 && second > 20) {
+      // 避免不适配的手机一直重试
+      activeRecord = 1;
+      startRecord();
+    }
+  }
+}
+
+// 开始录屏
+function startRecord() {
+  if (!isRecording && activeRecord == 1) {
+    swipe(700, 0, 750, 1300, 200);
+    commonWait();
+
+    // 录屏工具,关闭。,按钮
+    // 每个手机不一样, 需要进行适配
+    let startRecBtn = descMatches("(录屏工具|录制屏幕),关闭.*").findOne(1000);
+    if (startRecBtn) {
+      log("找到[开启录屏]按钮: ", startRecBtn.desc());
+      startRecBtn.click();
+      commonWait();
+      isRecording = true;
+      sleep(3000);
+    } else {
+      log("没有找到[开启录屏]按钮");
+      printPageUIObject();
+      back();
+      commonWait();
+    }
+
+    let confirmRecord = text("开始录制").findOne(500);
+    if (confirmRecord) {
+      confirmRecord.click();
+      commonWait();
+      sleep(5000);
+    }
+  } else {
+    // log("已经在录屏中或者不需要录屏");
+  }
+}
+
+// 开始录屏
+function stopRecord() {
+  if (isRecording) {
+    swipe(700, 0, 750, 1300, 200);
+    commonWait();
+    // 录屏工具,关闭。,按钮
+    // 录制屏幕,开启。,按钮
+    let startRecBtn = descMatches("(录屏工具|录制屏幕),开启.*").findOne(3000);
+    if (startRecBtn) {
+      log("找到[关闭录屏]按钮: ", startRecBtn.desc());
+      if (startRecBtn.desc().indexOf("录屏工具") != -1) {
+        startRecBtn.click();
+        back();
+        commonWait();
+      } else {
+        // S8, 点击后无法关闭, 只是提示正在录屏, 969,317
+        back();
+        sleep(1000);
+        click(916, 306);
+        sleep(1500);
+        press(916, 306, 300);
+        sleep(2000);
+        back();
+        commonWait();
+      }
+      isRecording = false;
+      //printPageUIObject();
+    } else {
+      log("没有找到[关闭录屏]按钮");
+      back();
+      commonWait();
+      // printPageUIObject();
+    }
+    sleep(3000);
+  } else {
+    log("不在录屏中");
+  }
 }
 
 function waitCheckLog() {
@@ -895,14 +1005,13 @@ function doInCart() {
     toast("抢菜第" + round + "轮第" + count + "次");
   }
   check_all();
-  let submit_btn = textMatches("结算.*|重新加载").findOne(1000);
+  let submit_btn = textMatches("结算.*|重新加载|刷新").findOne(1000);
   if (submit_btn) {
     if (submit_btn.text().indexOf("结算") != -1) {
       // 极端情况下, 商品秒无, 这个时候会没有结算按钮, 需要再次判断
       // 只是 "结算" 按钮的话, 并未选择商品, 只有出现 "结算(*)" 才是选中了 , 这种情况会出现在早上6点左右, 服务器繁忙的情况下
       let noExpressTxt = text("商品运力不足").findOne(100);
       if (submit_btn.text() != "结算(0)" && noExpressTxt == null) {
-        // check_all2();
         log("点击->[" + submit_btn.text() + "]");
         submit_btn.click(); //结算按钮点击
         // commonWait(); // 把一些打印日志的操作转移到点击之后的等待过程
@@ -953,10 +1062,14 @@ function doInCart() {
         reload_mall_cart();
       }
     } else {
-      // 重新加载
+      // 重新加载|刷新
       submit_btn.parent().click();
       commonWait();
     }
+  } else {
+    musicNotify("09.error");
+    console.error("ERROR-05: 购物车加载失败");
+    printPageUIObject();
   }
   // log("DEBUG: [结算]执行结束");
 }
@@ -1095,7 +1208,7 @@ function doInHome() {
     click(loc.centerX(), loc.centerY()); // 执行一次点击大约耗时160ms
     console.time("into_mall 耗时");
     let mall = textMatches(
-      /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN01CYtPWu1.*)/
+      /(抢购结束|小区提货点|盒区团购|立即下单|配送已约满|O1CN011FpVIT1g4o.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
     // TODO, 排查false的问题
@@ -1129,10 +1242,10 @@ function click_i_know(iKnow) {
     );
     clickByCoor(retry_button);
     if (reason.indexOf("请您稍后再试") != -1) {
-      // 提交订单页面的 确定 提示, 点击以后不会自动返回
-      log("执行[返回8]操作");
-      back();
-      commonWait();
+      // 05/08 新版本这个框是出现在购物车页面, 不需要返回
+      // log("执行[返回8]操作");
+      // back();
+      // commonWait();
     } else {
       // 05/05 [前方拥挤, 亲稍等再试试], 这种情况下, 会自动返回[盒区团购]页面
       log("不执行[返回]操作");
@@ -1166,20 +1279,29 @@ function printReason(iKnow) {
 }
 
 function check_all() {
-  log("判断购物车是否已经选中商品");
-  let checkAllbtn = descMatches(".*全选").findOne(100);
-  if (checkAllbtn) {
-    let is_checked = checkAllbtn.desc() == "取消全选";
-    log("购物车当前已全选商品:" + is_checked);
-    // 自提的情况下, 已选择了商品 结算条件 true, 配送费条件 false
-    if (!is_checked) {
-      log("全选所有商品");
-      checkAllbtn.click();
-      commonWait();
-      sleep(1000);
-    } else {
-      log("购物车已经全选商品");
+  // log("判断购物车是否已经选中商品");
+  let headTxt = text("盒马鲜生").findOne(100); // 20ms
+  if (headTxt) {
+    let checkAllbtn = headTxt
+      .parent()
+      .find(className("android.widget.CheckBox"))
+      .get(0);
+    if (checkAllbtn) {
+      let is_checked = checkAllbtn.checked();
+      // log("购物车当前已全选商品:" + is_checked);
+      if (checkAllbtn.enabled()) {
+        if (!is_checked) {
+          log("全选所有商品");
+          checkAllbtn.click();
+          commonWait();
+          sleep(1000);
+        } else {
+          log("购物车已经全选商品");
+        }
+      }
     }
+
+    // 自提的情况下, 已选择了商品 结算条件 true, 配送费条件 false
   }
 }
 
