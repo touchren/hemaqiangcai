@@ -43,7 +43,8 @@ var buyMode;
 
 // 过滤商品的正则表示式 查看 config.js
 var itemFilterStr;
-// 任务中断次数
+
+// 主程序切换到别的APP的次数
 var interruptCount = 0;
 
 // 是否启动录屏
@@ -54,18 +55,6 @@ var activePeakRecord = 1;
 
 // 是否在录屏中
 var isRecording = false;
-
-// 当前正在下单的商品 (弃用)
-var currentItemTxt;
-
-// 黑名单列表 (主要是无货) - (0503 已经弃用)
-var blackItemArr = new Array();
-
-// [立即下单] 和 [提交订单] 的 中心坐标都与对方重叠, 填写 门牌号 的时候, 会获取不到 [提交订单] 对象, 使用[立即下单] 替代
-var submitOrderX;
-var submitOrderY;
-
-var activeItemsSelected = false;
 
 // 购物车内商品列表
 var cartItems;
@@ -194,7 +183,7 @@ function start() {
           console.log("出现[当前购物高峰期人数较多, 请稍后再试]图片, 返回首页");
           log("执行返回10");
           back();
-          commonWait();
+          //commonWait();
         } else {
           console.error("ERROR-04: 无法判断在哪个页面");
           printPageUIObject();
@@ -404,7 +393,6 @@ function stopRecord() {
 }
 
 function waitCheckLog() {
-  //log("正在查看日志")
   sleep(3000);
 }
 
@@ -440,7 +428,7 @@ function getConfig() {
     if (config.address) {
       // setClip(config.address);
     }
-    toastLog("手机号:[" + config.phone + "],门牌号[" + config.address + "]");
+    //toastLog("手机号:[" + config.phone + "],门牌号[" + config.address + "]");
     sleep(2000);
   }
   // toastLogClip();
@@ -459,15 +447,8 @@ function closeClock() {
     commonWait();
     sleep(500);
   } else {
-    // log("闹钟可能是弹窗状态");
-    // printPageUIObject();
-    // let stopClockBtn = text("停止").findOne(100);
-    // if (stopClockBtn) {
-    //   stopClockBtn.click();
-    //   commonWait();
-    // } else {
+    // 可能是弹窗状态, 5分钟后会自动消失
     log("没有识别出闹钟按钮");
-    // }
   }
 }
 
@@ -480,20 +461,20 @@ function unlock() {
   }
 }
 
-function toastLogClip() {
-  var w = floaty.window(
-    <frame gravity="center" bg="#ffffff">
-      <text id="text">获取剪贴板</text>
-    </frame>
-  );
-  ui.run(function () {
-    w.requestFocus();
-    setTimeout(() => {
-      toastLog("请确认当前门牌号为:[" + getClip() + "]");
-      w.close();
-    }, 500);
-  });
-}
+// function toastLogClip() {
+//   var w = floaty.window(
+//     <frame gravity="center" bg="#ffffff">
+//       <text id="text">获取剪贴板</text>
+//     </frame>
+//   );
+//   ui.run(function () {
+//     w.requestFocus();
+//     setTimeout(() => {
+//       toastLog("请确认当前门牌号为:[" + getClip() + "]");
+//       w.close();
+//     }, 500);
+//   });
+// }
 
 function paySuccess() {
   // 标记为成功
@@ -628,7 +609,6 @@ function printAllItems() {
   }
 }
 
-
 function printCartItems() {
   // desc("展开, 按钮") desc("收起, 按钮")
   if (cartItems == null) {
@@ -729,10 +709,6 @@ function filterActiveItem(item) {
 
 function clickRadioByItem(item) {
   let itemDiv = item.parent();
-  // TODO 选中商品
-  //let btn = idContains("cartEl").findOne(5000);
-  //let btn = idContains("nav_icon_wrap").findOne(5000);
-  //let btn = text("").findOne(1000);
   let checkBtns = itemDiv.find(idContains("cart_icon"));
   let checkBtn = checkBtns[0];
   log("点击[" + item.text() + "]的添加购物车按钮");
@@ -826,8 +802,6 @@ function clickByCoor(obj) {
 function doInSubmit() {
   log("已进入[确认订单]页面");
   // 注意 [金额]前面的 [合计:] 跟[￥0.00]并不是一个控件
-  // 220430 已经不需要选择时间, 所以可以直接下一步
-  // |.*自动选择可用时间
   // 支付宝|确认付款| 说明已经成功
   let selectTimeBtn = textMatches(
     "(￥0.00|￥d+.d{1,2}|.*送达|选择时间|支付宝.*|确认付款|.*滑块完成验证.*)"
@@ -942,19 +916,7 @@ function orderConfirm() {
         }
       } else {
         printPageUIObject();
-        // 在输入信息的时候会挡住按钮
-        // if (submitOrderX && submitOrderY) {
-        //   log(
-        //     "直接点击[提交订单]对应的坐标[%s,%s]",
-        //     submitOrderX,
-        //     submitOrderY
-        //   );
-        //   click(submitOrderX, submitOrderY);
-        // } else {
-        //   console.error("没有缓存到[提交订单]的坐标");
-        //   console.error("ERROR5 未知情况");
-        //   musicNotify("09.error");
-        // }
+        musicNotify("09.error");
         commonWait();
       }
     }
@@ -987,16 +949,13 @@ function findActiveFilterItems() {
     var tempItem = allItems[i];
     //if (filterActiveItem(tempItem)) {
     // 过滤黑名单里面的商品
-    if (blackItemArr.indexOf(tempItem.text()) == -1) {
-      activeItems.push(tempItem);
-      try {
-        console.info("INFO: 可购买商品信息: " + tempItem.text());
-      } catch (e) {
-        console.error(e.stack);
-      }
-    } else {
-      log("商品[%s]存在黑名单中, 跳过加入可购买名单", tempItem.text());
+    activeItems.push(tempItem);
+    try {
+      console.info("INFO: 可购买商品信息: " + tempItem.text());
+    } catch (e) {
+      console.error(e.stack);
     }
+
     //}
   }
   return activeItems;
@@ -1004,7 +963,7 @@ function findActiveFilterItems() {
 
 // 推荐商品选购
 function itemRecomSel() {
-  activeItemsSelected = false;
+  let activeItemsSelected = false;
   let activeItems = findActiveFilterItems();
   if (activeItems.length != 0) {
     for (let i = 0; i < activeItems.length; i++) {
@@ -1030,7 +989,6 @@ function itemRecomSel() {
 /** 商品选择页处理逻辑 */
 function doInItemSel2() {
   isPaying = false;
-  activeItemsSelected = false;
   console.time("查找购物车按钮 耗时");
   let btn = idContains("cartEl").findOne(5000);
   //let btn = idContains("nav_icon_wrap").findOne(5000);
@@ -1053,7 +1011,7 @@ function doInCart() {
   printCartItems();
   // 自动选择不在购物车中的商品
   itemRecomSel();
-  // 220417 , 目前单次约2.5秒, 2小时约2880次
+
   if (count >= MAX_TIMES_PER_ROUND) {
     // 大约每半小时休息几分钟
     toastLog("本轮捡漏没有成功, 稍后重新开始");
@@ -1076,42 +1034,25 @@ function doInCart() {
         continueRefreshCount = 0;
         log("点击->[" + submit_btn.text() + "]");
         submit_btn.click(); //结算按钮点击
-        // commonWait(); // 把一些打印日志的操作转移到点击之后的等待过程
-        // 记录商品信息
-        // let item = className("android.widget.TextView").depth(30).findOne(100);
-        // if (item) {
-        //   log("第一件商品:" + item.text());
-        // }
-        // 1. 配送运力已约满
-        // 2. 门店已打烊
-        // 3. 订单已约满 (这种情况可能会等比较长时间才返回)
-        // |提交订单
         let nextBtn = textMatches(
-          /(我知道了|返回购物车|确定|前方拥堵.*|确认订单|￥[0-2]{1}\d:\d{2}-[0-2]{1}\d:\d{2})/
+          /(确定|前方拥挤.*|确认订单|￥[0-2]{1}\d:\d{2}-[0-2]{1}\d:\d{2})/
         ).findOne(5000);
+        // 会出现 [载入中] 过渡界面
         if (nextBtn) {
           log("进入条件6: ", nextBtn.text());
-          if (
-            nextBtn.text() == "我知道了" ||
-            nextBtn.text() == "返回购物车" ||
-            nextBtn.text() == "确定"
-          ) {
+          if (nextBtn.text() == "确定") {
+            // 当前购物高峰期人数较多, 请您稍后再试
             console.time("点击->01[" + nextBtn.text() + "]耗时");
-            printReason(nextBtn);
+            if (!textMatches("当前购物高峰期人数较多.*").exists()) {
+              printReason(nextBtn);
+            }
             nextBtn.parent().click();
-            commonWait();
+            // TODO 05/09 这里还是在本页面, 不设置等待
+            // commonWait();
             console.timeEnd("点击->01[" + nextBtn.text() + "]耗时");
-            // 这里必须要等待一定时长(>600), 否则下次结算一定概率会点击无效
-            sleep(600);
-          } else if (nextBtn.text().indexOf("前方拥堵") != -1) {
-            // TODO, 这个返回不确定是否需要
-            log("执行返回17");
-            back();
-            commonWait();
-            // 这里必须要等待一定时长(>600), 否则下次结算一定概率会点击无效
-            sleep(600);
+          } else if (nextBtn.text().indexOf("前方拥挤") != -1) {
+            // 这是一个toast无需处理
           } else {
-            // 立即支付|极速支付|20:00-22:00
             log("没有出现[我知道了|确定]等失败信息");
           }
         } else {
@@ -1121,7 +1062,6 @@ function doInCart() {
         }
       } else {
         // log("没有可买商品或[商品运力不足]，刷新页面");
-
         if (continueRefreshCount >= 100) {
           log("返回首页再次查询新商品(%s)", continueRefreshCount);
           // 返回首页
@@ -1172,7 +1112,6 @@ function doInHome() {
       /(盒区团购|爱一起 尽享当夏|海鲜水产|O1CN011FpVIT1g4o.*)/
     ).findOne(4000); // S8 加载耗时3.3s, 高峰期也不会超过4秒
     console.timeEnd("into_mall 耗时");
-    // TODO, 排查false的问题
     log("成功进入[商品列表]页面:" + (mall != null));
   } else {
     log("没有找到进入团购的按钮");
@@ -1202,15 +1141,15 @@ function click_i_know(iKnow) {
       reason
     );
     clickByCoor(retry_button);
-    if (reason.indexOf("请您稍后再试") != -1) {
-      // 05/08 新版本这个框是出现在购物车页面, 不需要返回
-      // log("执行[返回8]操作");
-      // back();
-      // commonWait();
-    } else {
-      // 05/05 [前方拥挤, 亲稍等再试试], 这种情况下, 会自动返回[盒区团购]页面
-      log("不执行[返回]操作");
-    }
+    //if (reason.indexOf("请您稍后再试") != -1) {
+    // 05/08 新版本这个框是出现在购物车页面, 不需要返回
+    // log("执行[返回8]操作");
+    // back();
+    // commonWait();
+    //} else {
+    // 05/05 [前方拥挤, 亲稍等再试试], 这种情况下, 会自动返回[盒区团购]页面
+    //  log("不执行[返回]操作");
+    //}
   }
 }
 
@@ -1261,8 +1200,6 @@ function check_all() {
         }
       }
     }
-
-    // 自提的情况下, 已选择了商品 结算条件 true, 配送费条件 false
   }
 }
 
@@ -1321,11 +1258,6 @@ function randomSwipe(sx, sy, ex, ey) {
   //获取运行轨迹，及参数
   var time = [0, random(timeMin, timeMax)];
   var track = bezierCreate(sx, sy, x2, y2, x3, y3, ex, ey);
-
-  //log("随机控制点A坐标：" + x2 + "," + y2);
-  //log("随机控制点B坐标：" + x3 + "," + y3);
-  //log("随机滑动时长：" + time[1]);
-  //log("track" + track)
 
   //滑动
   gestures(time.concat(track));
