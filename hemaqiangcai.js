@@ -129,7 +129,8 @@ function start() {
   launchApp(APP_NAME);
   commonWait();
   if (ACTIVE_STOP_APP == 1) {
-    sleep(3000);
+    // 220526 这里等待较长时间, 否则可能会未定位成功
+    sleep(5000);
   }
 
   while (count < MAX_TIMES_PER_ROUND && !isFailed && !isSuccessed) {
@@ -165,7 +166,7 @@ function start() {
         page.text().indexOf("正在付款") != -1 ||
         page.text().indexOf("使用密码") != -1
       ) {
-        log("付款的中间状态, 等待5000ms");
+        toastLog("付款的中间状态, 等待5000ms");
         sleep(5000);
       } else if (
         page.text().indexOf("确认交易") != -1 ||
@@ -346,9 +347,9 @@ function isPeakTime() {
       return;
     }
   });
-  if (result) {
-    log("当前时间为高峰期, 跳过部分操作");
-  }
+  // if (result) {
+  //   log("当前时间为高峰期, 跳过部分操作");
+  // }
   return result;
 }
 
@@ -750,8 +751,10 @@ function printCartItems() {
     printCurrentCartItems();
     let closeBtn = text("收起").findOnce();
     if (closeBtn) {
+      sleep(1000);
       closeBtn.click();
       commonWait();
+      sleep(1000);
     } else {
       log("找不到[收起]按钮");
     }
@@ -929,13 +932,8 @@ function clickByCoor(obj) {
 function clickByCoorNoWait(obj) {
   let loc = obj.bounds();
   log(
-    "通过坐标点击[" +
-      obj.text() +
-      "]:(" +
-      loc.centerX() +
-      "," +
-      loc.centerY() +
-      ")"
+    "通过坐标点击[%s]:(" + loc.centerX() + "," + loc.centerY() + ")",
+    obj.text() != "" ? obj.text() : obj.className() + "(" + obj.depth() + ")"
   );
   press(loc.centerX(), loc.centerY(), 10);
 }
@@ -1012,17 +1010,24 @@ function orderConfirm() {
       ).findOne(200);
       if (failReason) {
         if (failReason.text().indexOf("运力不足") != -1) {
-          log("运力不足, 等待2000ms");
-          sleep(2000);
+          toastLog("运力不足, 等待5000ms");
+          sleep(5000);
         } else if (failReason.text().indexOf("可售时段") != -1) {
-          log("不在可售时段, 等待2000ms");
-          sleep(2000);
+          let sleepTime = 10 * 1000;
+          if (isPeakTime()) {
+            sleep(1000);
+          }
+          log("不在可售时段, 等待[%s]ms", sleepTime);
+          sleep(sleepTime);
         } else {
           log("商品库存不足失败");
         }
       }
-      log("执行返回18");
-      back();
+
+      if (!text("确认订单").findOnce().parent().child(0).click()) {
+        log("执行返回18");
+        back();
+      }
       commonWait();
     } else {
       // 有金额了就认为是支付中, 如果失败返回了首页, 再重置为false
@@ -1039,12 +1044,12 @@ function orderConfirm() {
           // [确认提货点为] [XX小区] [更改] [确定]
           // 05/07 有时候会需要确认 小区 , 操作一次以后, 短期内不再需要确认, 后面还需不需要确认还不确定
           click_i_know();
-          console.time("跳转到支付宝耗时");
+          console.time("跳转到支付页面耗时");
           // 载入中 比较短, 使用[支付宝]判断就够了
           let checkTxt = textMatches(
             "(支付宝|免密支付中|免密支付成功|确定)"
           ).findOne(3000);
-          console.timeEnd("跳转到支付宝耗时");
+          console.timeEnd("跳转到支付页面耗时");
           if (checkTxt) {
             log("进入条件6:", checkTxt.text());
             if (checkTxt.text() != "确定") {
@@ -1217,7 +1222,7 @@ function doInCart() {
           (noExpressTxt == null || count % 10 == 0)
         ) {
           continueRefreshCount = 0;
-          log("点击->[" + submit_btn.text() + "]");
+          //log("点击->[" + submit_btn.text() + "]");
           let tempI = 0;
           while (submit_btn && !text("确定").exists() && tempI < 5) {
             tempI++;
@@ -1226,12 +1231,20 @@ function doInCart() {
             // } else {
             //   submit_btn.click(); //结算按钮点击
             // }
-            sleep(tempI * 50);
+            //sleep(tempI * 50);
+            let needRetryTxt = textMatches(/(.*请您稍后再试)/).findOne(
+              tempI * 50
+            );
+            if (needRetryTxt) {
+              log("识别到[%s]文本, 重置循环点击次数为0", needRetryTxt.text());
+              tempI = 0;
+            }
             submit_btn = textStartsWith("结算(").findOnce();
           }
           // 这里只有两种场景, 1: 确定, 2已经到 下个页面 [确认订单]
           //
-          // 22/05/25 更新5.41.2版本之后, 高峰期不一定弹出 [确定按钮了]
+          // 22/05/25 更新5.41.2版本之后, // 高峰期 [温馨提示] [当前购物高峰期人数较多, 请您稍后再试] [确定] 跳转为 toast
+
           let nextBtn = textMatches(
             /(前方拥挤.*|确定|确认订单|.*请您稍后再试)/
           ).findOne(2000);
@@ -1239,7 +1252,6 @@ function doInCart() {
           if (nextBtn) {
             log("进入条件6: ", nextBtn.text());
             if (nextBtn.text() == "确定") {
-              // 本页面 [温馨提示] [当前购物高峰期人数较多, 请您稍后再试] [确定]
               console.time("点击->01[" + nextBtn.text() + "]耗时");
               if (!textMatches("当前购物高峰期人数较多.*").exists()) {
                 printReason(nextBtn);
@@ -1256,10 +1268,13 @@ function doInCart() {
               log("没有出现[我知道了|确定]等失败信息");
             }
           } else {
-            printPageUIObject();
-            console.error("ERROR7: 未知情况");
-            musicNotify("09.error");
-            commonWait();
+            if (text("我常买").exists()) {
+              console.error("ERROR7: 结算按钮点击未生效");
+            } else {
+              console.error("ERROR7: 未知情况");
+              printPageUIObject();
+              musicNotify("09.error");
+            }
           }
         } else {
           continueRefreshCount++;
@@ -1306,11 +1321,27 @@ function doInHome() {
       let addBtn = textStartsWith("家").findOne(2000);
       if (addBtn) {
         toastLog("确认地址:" + addBtn.text());
-        clickByCoor(addBtn);
-        sleep(1000);
-        if (!toCart()) {
-          log("没有找到进入购物车的按钮");
-          log("执行返回7");
+        let currAddTxt = textMatches("当前地址.*").findOne(3000);
+        if (currAddTxt) {
+          // 220526 前面是 家后面带两个空格
+          let add = addBtn.text().substring(3).trim();
+          if (currAddTxt.text().indexOf(add) != -1) {
+            log("当前地址已经是:", add);
+            id("select_address_back").findOnce().click();
+          } else {
+            log("原地址:[%s], 切换为:[%s]", currAddTxt.text(), add);
+            sleep(2000);
+            clickByCoor(addBtn);
+          }
+          sleep(2000);
+          if (!toCart()) {
+            log("没有找到进入购物车的按钮");
+            log("执行返回7");
+            back();
+            commonWait();
+          }
+        } else {
+          console.error("没有找到[当前地址]");
           back();
           commonWait();
         }
