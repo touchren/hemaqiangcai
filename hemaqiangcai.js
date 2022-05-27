@@ -1231,15 +1231,21 @@ function doInCart() {
             // } else {
             //   submit_btn.click(); //结算按钮点击
             // }
-            //sleep(tempI * 50);
             let needRetryTxt = textMatches(/(.*请您稍后再试)/).findOne(
               tempI * 50
             );
             if (needRetryTxt) {
-              log("识别到[%s]文本, 重置循环点击次数为0", needRetryTxt.text());
+              log(
+                "识别到[%s]文本, 当前第%s次, 重置循环点击次数为0",
+                tempI,
+                needRetryTxt.text()
+              );
               tempI = 0;
             }
             submit_btn = textStartsWith("结算(").findOnce();
+            if (!submit_btn || (isPeakTime() && tempI == 3)) {
+              printPageUIObject();
+            }
           }
           // 这里只有两种场景, 1: 确定, 2已经到 下个页面 [确认订单]
           //
@@ -1515,6 +1521,12 @@ function reload_mall_cart() {
  * @param {终点y} ey
  */
 function randomSwipe(sx, sy, ex, ey) {
+  // 22/05/27 解决问题: [JavaException: java.lang.IllegalArgumentException: Path bounds must not be negative]
+  if (sx == 0 || ex == 0) {
+    console.warn("[device.width]返回结果为0,使用默认值540");
+    sx = 540;
+    ex = 540;
+  }
   //log(sx, sy, ex, ey);
   //设置随机滑动时长范围
   var timeMin = 250;
