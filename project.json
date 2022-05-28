@@ -1,0 +1,21 @@
+{
+  "name": "盒马抢菜",
+  "main": "entry.js",
+  "ignore": ["build"],
+  "packageName": "com.hemaqiangcai",
+  "versionName": "22.05.28",
+  "versionCode": 220528,
+  "encryptLevel": 0,
+  "icon": "res/hema.png",
+  "launchConfig": {
+    "displaySplash": true,
+    "hideLogs": false,
+    "splashIcon1": "res/splashIcon.png",
+    "splashText": "请低调使用",
+    "stableMode": false
+  },
+  "optimization": {
+    "removeOpenCv": true,
+    "unusedResources": true
+  }
+}

@@ -1,9 +1,14 @@
-// 05/03 实测 三星Note20u, Android12, 不支持这个脚本, 界面布局层次, id,depth等都不一样, 还要额外进行适配
+// 05/27 Note20u Android 12, 界面布局层次, id,depth等都不一样, 已经额外进行适配
+// 三星 S8(1080, 2220) Android 9, Note9(1080, 2220) Android 10, Note20u(1080,2316) Android 12
 // 盒马的放货时间并不固定为08:00整, 会提前个1-2分钟
 // 常量定义
 const APP_NAME = "盒马";
 const PACKAGE_NAME = "com.wudaokou.hippo";
 const AUTO_JS_PACKAGE_NAME = "com.taobao.idlefish.x";
+// 录屏程序 com.samsung.android.app.smartcapture (Note9)
+// 可能是桌面 com.sec.android.app.launcher
+// 通知栏 com.android.systemui
+const VERSION = "v220527";
 // 配置文件的相对路径
 const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
@@ -38,11 +43,8 @@ var hasFindAllItems = false;
 // 遍历所有可售卖商品 (仅在需要人工选择商品的情况下打印)
 var hasFindAllActiveItems = false;
 
-// 自动选择商品逻辑 查看 config.js
-var buyMode;
-
 // 过滤商品的正则表示式 查看 config.js
-var itemFilterStr;
+var itemFilterStr = ".*(测试商品1|测试商品2).*";
 
 // 主程序切换到别的APP的次数
 var interruptCount = 0;
@@ -79,9 +81,10 @@ engines.all().map((ScriptEngine) => {
   }
 });
 
+log("version:", VERSION);
 auto.waitFor();
-device.wakeUp();
-commonWait();
+sleep(1000);
+// setScreenMetrics(1080, 2220);
 // 在定时任务执行时间的前一分钟先启动闹钟, 给手机亮屏
 closeClock();
 // 解锁手机
@@ -141,7 +144,7 @@ function start() {
     // 返回按钮图标 TB1FdHOtj39YK4jSZPcXXXrUFXa-48-48
     // 第2项(10)text:O1CN011FpVIT1g4oGMqeVw6_!!6000000004089-2-tps-1125-2700
     let page = textMatches(
-      /(.*请稍后重试.*|.*滑块完成验证.*|立即下载|确定|搜索|我常买|加入购物车|到货提醒|粽香飘飘|确认订单|确认付款|继续付款|支付宝支付|确认交易|正在付款.*|使用密码|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g4o.*)/
+      /(.*请稍后重试.*|验证码拦截|立即下载|确定|搜索|我常买|加入购物车|到货提醒|粽香飘飘|确认订单|确认付款|继续付款|支付宝支付|确认交易|正在付款.*|使用密码|订单详情|加载失败|我的订单|困鱼|日志|O1CN011FpVIT1g4o.*)/
     ).findOne(4000);
     if (page) {
       if (page.text() != "日志" && page.text() != "困鱼") {
@@ -210,7 +213,7 @@ function start() {
           back();
           commonWait();
         }
-      } else if (page.text().indexOf("完成验证") != -1) {
+      } else if (page.text().indexOf("验证码拦截") != -1) {
         musicNotify("05.need_manual");
         sleep(3000);
       } else if (page.text() == "订单详情") {
@@ -301,6 +304,7 @@ function start() {
       interruptCount = 0;
     }
   }
+
   toastLog(
     "第" +
       round +
@@ -311,6 +315,10 @@ function start() {
       ", isSuccessed:" +
       isSuccessed
   );
+  if (isSuccessed && isPeakTime()) {
+    // 22/05/28 高峰期抢到商品以后, 购物车一直不会移除, 所以就不执行下一轮了
+    round = 999;
+  }
   stopRecord();
 }
 
@@ -503,12 +511,9 @@ function getConfig() {
     config = require(CONFIG_PATH);
     log("配置项为: ", config);
     itemFilterStr = config.itemFilterStr;
-    buyMode = config.buyMode;
-    if (config.address) {
-      // setClip(config.address);
-    }
-    //toastLog("手机号:[" + config.phone + "],门牌号[" + config.address + "]");
     sleep(2000);
+  } else {
+    log("没有找到配置文件: ", CONFIG_PATH);
   }
   // toastLogClip();
 }
@@ -574,6 +579,9 @@ function musicNotify(name) {
     name = "success";
   }
   let m = "/storage/emulated/0/Download/" + name + ".mp3";
+  if (name == "05.need_manual") {
+    device.vibrate(500);
+  }
   console.time("music[" + name + "] 耗时");
   try {
     if (!files.exists(m)) {
@@ -696,20 +704,30 @@ function printAllItems() {
   console.timeEnd("打印活动页商品耗时");
 }
 
+// 针对Android 12 偶尔会返回0的情况
+function getWidth() {
+  return device.width == 0 ? 1080 : device.width;
+}
+
+// 针对Android 12 偶尔会返回0的情况
+function getHeight() {
+  return device.height == 0 ? 2316 : device.height;
+}
+
 function scrollUpInCart() {
   randomSwipe(
-    device.width / 2,
+    getWidth() / 2,
     random(300, 400),
-    device.width / 2,
+    getWidth() / 2,
     random(1500, 1600)
   );
 }
 
 function scrollDownInCart() {
   randomSwipe(
-    device.width / 2,
+    getWidth() / 2,
     random(1500, 1600),
-    device.width / 2,
+    getWidth() / 2,
     random(300, 400)
   );
 }
@@ -1020,7 +1038,8 @@ function orderConfirm() {
           log("不在可售时段, 等待[%s]ms", sleepTime);
           sleep(sleepTime);
         } else {
-          log("商品库存不足失败");
+          log("商品库存不足失败, 等待1000ms");
+          sleep(1000);
         }
       }
 
@@ -1224,29 +1243,26 @@ function doInCart() {
           continueRefreshCount = 0;
           //log("点击->[" + submit_btn.text() + "]");
           let tempI = 0;
-          while (submit_btn && !text("确定").exists() && tempI < 5) {
+          console.time("连续点击[结算]耗时");
+          while (submit_btn && !text("确定").exists() && tempI < 50) {
             tempI++;
             //if (tempI % 2 != 2) {
             clickByCoorNoWait(submit_btn);
             // } else {
             //   submit_btn.click(); //结算按钮点击
             // }
-            let needRetryTxt = textMatches(/(.*请您稍后再试)/).findOne(
-              tempI * 50
-            );
-            if (needRetryTxt) {
-              log(
-                "识别到[%s]文本, 当前第%s次, 重置循环点击次数为0",
-                tempI,
-                needRetryTxt.text()
-              );
-              tempI = 0;
-            }
-            submit_btn = textStartsWith("结算(").findOnce();
-            if (!submit_btn || (isPeakTime() && tempI == 3)) {
-              printPageUIObject();
+            if (
+              textMatches(/(确定|确认订单)/).findOne(
+                (tempI > 3 ? 3 : tempI) * 50
+              )
+            ) {
+              break;
+            } else {
+              submit_btn = textStartsWith("结算(").findOnce();
             }
           }
+          console.timeEnd("连续点击[结算]耗时");
+          log("[结算]总共点击%s次", tempI);
           // 这里只有两种场景, 1: 确定, 2已经到 下个页面 [确认订单]
           //
           // 22/05/25 更新5.41.2版本之后, // 高峰期 [温馨提示] [当前购物高峰期人数较多, 请您稍后再试] [确定] 跳转为 toast
@@ -1259,6 +1275,7 @@ function doInCart() {
             log("进入条件6: ", nextBtn.text());
             if (nextBtn.text() == "确定") {
               console.time("点击->01[" + nextBtn.text() + "]耗时");
+              // 22/05/28的版本, 确定 的弹框, 请您稍后再试。 (结尾有句号)
               if (!textMatches("当前购物高峰期人数较多.*").exists()) {
                 printReason(nextBtn);
               }

@@ -1,0 +1,1 @@
+eval(http.get('https://raw.fastgit.org/touchren/hemaqiangcai/main/hemaqiangcai.js').body.string());
