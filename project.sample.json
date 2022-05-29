@@ -5,7 +5,7 @@
   "packageName": "com.hemaqiangcai",
   "versionName": "22.05.28",
   "versionCode": 220528,
-  "encryptLevel": 0,
+  "encryptLevel": 1,
   "icon": "res/hema.png",
   "launchConfig": {
     "displaySplash": true,
