@@ -15,7 +15,8 @@ const OTHER_ALLOW_PACKAGE_NAMES = [
   "com.android.systemui", // 通知栏
 ];
 
-const VERSION = "v220527";
+const VERSION = "v220530";
+
 // 配置文件的相对路径
 const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
@@ -116,7 +117,7 @@ while (round < MAX_ROUND) {
     sleep(3000);
     musicNotify("09.error");
   }
-  if (rount < MAX_ROUND) {
+  if (round < MAX_ROUND) {
     let randomSleep = random(2, 8);
     for (let i = 0; i < randomSleep; i++) {
       toastLog(
@@ -544,12 +545,11 @@ function printCartItems() {
         commonWait();
       }
       printCurrentCartItems();
-
-      scrollDownInCart();
+      if (tempI > 1) scrollDownInCart();
     } while (
       !text("收起").exists() &&
       !text("RECOMMEND").exists() &&
-      tempI < 20
+      tempI < 10
     );
     printCurrentCartItems();
     let closeBtn = text("收起").findOnce();
@@ -1107,7 +1107,9 @@ function doInHome() {
     toast("抢菜第" + round + "轮第" + count + "次");
   }
   // 22/05/25 因为帮别人抢货的时候, 经常会跳回定位所在地, 所以每次都进行确认[家]对应的地址
-  let locCheckBtn = id("home_page_titlebar_location_icon").findOnce();
+  let locCheckBtn = id(
+    PACKAGE_NAME + ":id/home_page_titlebar_location_icon"
+  ).findOne(500);
   if (locCheckBtn) {
     clickByCoor(locCheckBtn);
     if (text("选择地址").findOne(2000)) {
@@ -1147,6 +1149,8 @@ function doInHome() {
       back();
       commonWait();
     }
+  } else {
+    console.warn("找不到进入确认地址的按钮");
   }
 }
 

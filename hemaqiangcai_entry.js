@@ -64,6 +64,22 @@ const CONTEXT_URLS = [
   "https://ghproxy.com/https://raw.githubusercontent.com/touchren/hemaqiangcai/0506/hemaqiangcai.js",
   //"https://raw.githubusercontent.com/touchren/hemaqiangcai/0506/hemaqiangcai.js",
 ];
+
+auto.waitFor();
+console.setGlobalLogConfig({
+  file:
+    "/storage/emulated/0/脚本/logs/console-" +
+    new Date().getMonth() +
+    +new Date().getDate() +
+    ".log",
+});
+
+for (i = 0; i < 60; i++) {
+  log("测试entry, 第%s条日志", i);
+  sleep(1 * 1000);
+}
+
+log("开始获取远程脚本");
 let downloadSuccess = false;
 CONTEXT_URLS.forEach((context_url, i) => {
   if (!downloadSuccess) {
