@@ -1,23 +1,29 @@
 {
-  "assets": ["config.js", "project.json", "hemaqiangcai.js", "Unlock.js"],
+  "assets": [
+    "config.js",
+    "project.json",
+    "hemaqiangcai.js",
+    "Unlock.js"
+  ],
   "build": {
-    "build_id": "0A011EE1-3",
-    "build_number": 3,
-    "build_time": 1653887214169
+    "build_id": "90E52AA5-5",
+    "build_number": 5,
+    "build_time": 1653894420895
   },
   "useFeatures": [],
-  "icon": "res/hema.png",
+  "icon": "res/splashIcon.png",
   "launchConfig": {
     "hideLauncher": false,
     "hideLogs": false,
     "displaySplash": false,
     "serviceDesc": "必须开启辅助功能才能抢菜",
+    "splashIcon": "res/splashIcon.png",
     "splashText": "请低调使用",
     "stableMode": false,
     "volumeUpcontrol": true
   },
   "main": "hemaqiangcai_entry.js",
-  "name": "自用抢盒马",
+  "name": "聪抢盒马",
   "packageName": "com.touchren.hemaqiangcai",
   "scripts": {},
   "signingConfig": {
@@ -25,5 +31,5 @@
     "keystore": ""
   },
   "versionCode": 1,
-  "versionName": "22.05.308"
+  "versionName": "22.05.30"
 }
