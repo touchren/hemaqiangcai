@@ -74,7 +74,7 @@ console.setGlobalLogConfig({
     ".log",
 });
 
-for (i = 0; i < 60; i++) {
+for (i = 1; i <= 10; i++) {
   log("测试entry, 第%s条日志", i);
   sleep(1 * 1000);
 }
