@@ -1,17 +1,12 @@
 {
-  
-  "name": "盒马抢菜",
-  "main": "hemaqiangcai_entry.js",
-  "ignore": ["build"],
-  "packageName": "com.touchren.hemaqiangcai",
-  "versionName": "22.05.30",
-  "versionCode": 1, 
-  "icon": "res/hema.png",
-  "scripts": {},
-  "signingConfig": {
-    "alias": "",
-    "keystore": ""
+  "assets": ["config.js", "project.json", "hemaqiangcai.js", "Unlock.js"],
+  "build": {
+    "build_id": "0A011EE1-3",
+    "build_number": 3,
+    "build_time": 1653887214169
   },
+  "useFeatures": [],
+  "icon": "res/hema.png",
   "launchConfig": {
     "hideLauncher": false,
     "hideLogs": false,
@@ -21,12 +16,14 @@
     "stableMode": false,
     "volumeUpcontrol": true
   },
-  "assets": [],
-  "build": {
+  "main": "hemaqiangcai_entry.js",
+  "name": "自用抢盒马",
+  "packageName": "com.touchren.hemaqiangcai",
+  "scripts": {},
+  "signingConfig": {
+    "alias": "",
+    "keystore": ""
   },
-  "useFeatures": [],
-  "optimization": {
-    "removeOpenCv": true,
-    "unusedResources": true
-  }
+  "versionCode": 1,
+  "versionName": "22.05.308"
 }

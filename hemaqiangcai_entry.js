@@ -74,8 +74,8 @@ console.setGlobalLogConfig({
     ".log",
 });
 
-for (i = 1; i <= 10; i++) {
-  log("测试entry, 第%s条日志", i);
+for (i = 0; i < 3; i++) {
+  log("等待%s秒后开始", 3 - i);
   sleep(1 * 1000);
 }
 
