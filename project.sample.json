@@ -16,7 +16,7 @@
     "hideLauncher": false,
     "hideLogs": false,
     "displaySplash": false,
-    "serviceDesc": "必须开启辅助功能才能抢菜",
+    "serviceDesc": "必须开启辅助功能才能使用本程序",
     "splashIcon": "res/splashIcon.png",
     "splashText": "请低调使用",
     "stableMode": false,
@@ -24,12 +24,12 @@
   },
   "main": "hemaqiangcai_entry.js",
   "name": "聪抢盒马",
-  "packageName": "com.touchren.hemaqiangcai",
+  "packageName": "com.touchren.congqianghema",
   "scripts": {},
   "signingConfig": {
     "alias": "",
     "keystore": ""
   },
   "versionCode": 1,
-  "versionName": "22.05.30"
+  "versionName": "22.06.01"
 }

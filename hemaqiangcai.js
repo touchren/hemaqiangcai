@@ -1,3 +1,5 @@
+const VERSION = "v220531";
+
 // 05/27 Note20u Android 12, 界面布局层次, id,depth等都不一样, 已经额外进行适配
 // 三星 S8(1080, 2220) Android 9, Note9(1080, 2220) Android 10, Note20u(1080,2316) Android 12
 // 盒马的放货时间并不固定为08:00整, 会提前个1-2分钟
@@ -15,16 +17,14 @@ const OTHER_ALLOW_PACKAGE_NAMES = [
   "com.android.systemui", // 通知栏
 ];
 
-const VERSION = "v220530";
-
 // 配置文件的相对路径
 const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
-const MAX_ROUND = 6;
+const MAX_ROUND = 5;
 // 每轮最长重试次数 (300次约8分钟)
-const MAX_TIMES_PER_ROUND = 500;
+const MAX_TIMES_PER_ROUND = 300;
 // 点击按钮之后的通用等待时间
-const COMMON_SLEEP_TIME_IN_MILLS = 150;
+const COMMON_SLEEP_TIME_IN_MILLS = 200;
 // 是否先强行停止APP
 const ACTIVE_STOP_APP = 1;
 // 几秒提醒一次
@@ -84,6 +84,14 @@ let needReloadCart = true;
 // 购物车商品数量
 let itemIdx = 0;
 
+console.setGlobalLogConfig({
+  file:
+    "/storage/emulated/0/脚本/logs/console-" +
+    new Date().getMonth() +
+    +new Date().getDate() +
+    ".log",
+});
+
 // 调试期间临时使用, 关闭其他脚本
 engines.all().map((ScriptEngine) => {
   log("engines.myEngine().toString():" + engines.myEngine().toString());
@@ -93,9 +101,9 @@ engines.all().map((ScriptEngine) => {
 });
 
 log("version:", VERSION);
-auto.waitFor();
+device.wakeUp();
 sleep(1000);
-// setScreenMetrics(1080, 2220);
+auto.waitFor();
 // 在定时任务执行时间的前一分钟先启动闹钟, 给手机亮屏
 closeClock();
 // 解锁手机
@@ -347,6 +355,28 @@ function isPeakTime() {
   //   log("当前时间为高峰期, 跳过部分操作");
   // }
   return result;
+}
+
+// 马上开售则等待到开始, 否则跳过
+function sleepToSale() {
+  let result = false;
+  let tempI = 0;
+  do {
+    tempI++;
+    if (tempI % 1000 == 0) {
+      log("等待开售判断第%s次", tempI); // 2s打印一次
+    }
+    SALE_BEGIN_TIME_ARR.forEach((o, i) => {
+      if (isPeakTimeStr(o, 15 * 1000, -5)) {
+        result = true;
+        sleep(1); // 判断500次, 大约1s, 如果不添加这行, 500次, 大约30ms
+        return;
+      } else {
+        result = false;
+      }
+    });
+  } while (result);
+  // log("判断%s次后结束", tempI);
 }
 
 function checkSaleTime() {
@@ -798,12 +828,17 @@ function orderConfirm() {
       ).findOne(200);
       if (failReason) {
         if (failReason.text().indexOf("运力不足") != -1) {
-          toastLog("运力不足, 等待5000ms");
-          sleep(5000);
-        } else if (failReason.text().indexOf("可售时段") != -1) {
+          sleep(5 * 1000);
           let sleepTime = 10 * 1000;
           if (isPeakTime()) {
-            sleep(1000);
+            sleep(500);
+          }
+          log("运力不足, 等待[%s]ms", sleepTime);
+          sleep(sleepTime);
+        } else if (failReason.text().indexOf("可售时段") != -1) {
+          let sleepTime = 5 * 1000;
+          if (isPeakTime()) {
+            sleep(500);
           }
           log("不在可售时段, 等待[%s]ms", sleepTime);
           sleep(sleepTime);
@@ -1005,16 +1040,17 @@ function doInCart() {
       if (submit_btn.text().indexOf("结算") != -1) {
         // 极端情况下, 商品秒无, 这个时候会没有结算按钮, 需要再次判断
         // 只是 "结算" 按钮的话, 并未选择商品, 只有出现 "结算(*)" 才是选中了 , 这种情况会出现在早上6点左右, 服务器繁忙的情况下
-        let noExpressTxt = text("商品运力不足").findOne(100);
+        let noExpressTxt = text("商品运力不足").findOnce();
         if (
           submit_btn.text() != "结算(0)" &&
-          (noExpressTxt == null || count % 10 == 0)
+          (noExpressTxt == null || count % 10 == 0 || isPeakTime())
         ) {
           continueRefreshCount = 0;
           //log("点击->[" + submit_btn.text() + "]");
           let tempI = 0;
           console.time("连续点击[结算]耗时");
-          while (submit_btn && !text("确定").exists() && tempI < 50) {
+          while (submit_btn && !text("确定").exists() && tempI < 20) {
+            sleepToSale();
             tempI++;
             //if (tempI % 2 != 2) {
             clickByCoorNoWait(submit_btn);
@@ -1023,7 +1059,7 @@ function doInCart() {
             // }
             if (
               textMatches(/(确定|确认订单)/).findOne(
-                (tempI > 3 ? 3 : tempI) * 50
+                COMMON_SLEEP_TIME_IN_MILLS + (tempI > 5 ? 5 : tempI) * 10
               )
             ) {
               break;
@@ -1497,7 +1533,6 @@ function startRecord() {
   if (!isRecording && activeRecord == 1) {
     swipe(700, 0, 750, 1300, 200);
     commonWait();
-
     // 录屏工具,关闭。,按钮
     // 每个手机不一样, 需要进行适配
     // Note20U [898, 269, 221, 121] [录屏工具,已关闭。,按钮]
@@ -1509,7 +1544,7 @@ function startRecord() {
       isRecording = true;
       sleep(3000);
     } else {
-      log("没有找到[开启录屏]按钮");
+      console.warn("没有找到[开启录屏]按钮");
       printPageUIObject();
       back();
       commonWait();
@@ -1531,14 +1566,16 @@ function stopRecord() {
   if (isRecording) {
     swipe(700, 0, 750, 1300, 200);
     commonWait();
-    // Note920U 录屏工具,已开启。,按钮
+    // Note20U 录屏工具,已开启。,按钮
     // Note9 录屏工具,关闭。,按钮
     // S8 录制屏幕,开启。,按钮
-    let startRecBtn = descMatches("(录屏工具|录制屏幕).*开启.*").findOne(3000);
+    let startRecBtn = descMatches(
+      "(录屏工具,已开启|录屏工具,关闭|录制屏幕,开启).*"
+    ).findOne(3000);
     if (startRecBtn) {
       log("找到[关闭录屏]按钮: ", startRecBtn.desc());
       if (startRecBtn.desc().indexOf("录屏工具") != -1) {
-        // Note9
+        // Note9/Note20U
         startRecBtn.click();
         back();
         commonWait();
@@ -1553,6 +1590,7 @@ function stopRecord() {
       //printPageUIObject();
     } else {
       log("没有找到[关闭录屏]按钮, 非Note9,S8,Note20u需要自己适配");
+      printPageUIObject();
       back();
       commonWait();
       // printPageUIObject();
@@ -1606,7 +1644,7 @@ function clickByCoorNoWait(obj) {
     "通过坐标点击[%s]:(" + loc.centerX() + "," + loc.centerY() + ")",
     obj.text() != "" ? obj.text() : obj.className() + "(" + obj.depth() + ")"
   );
-  press(loc.centerX(), loc.centerY(), 10);
+  press(loc.centerX(), loc.centerY(), 20);
 }
 
 function musicNotify(name) {
