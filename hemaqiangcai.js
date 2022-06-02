@@ -1333,8 +1333,12 @@ function reload_mall_cart() {
   sleep(random(500, 1000));
   if (ACTIVE_STOP_APP == 1 && !text("盒马鲜生").findOne(5000)) {
     printPageUIObject();
-    console.warn("[盒马鲜生]不存在, 跳过本轮");
-    isFailed = true;
+    if (text("我常买").exists()) {
+      console.warn("[盒马鲜生]不存在, 跳过本轮");
+      isFailed = true;
+    } else {
+      console.warn("购物车页面/盒马APP可能已经被切走");
+    }
   }
   needReloadCart = false;
   closeSimilarRecom();
