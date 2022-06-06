@@ -22,7 +22,7 @@
     "stableMode": false,
     "volumeUpcontrol": true
   },
-  "main": "hemaqiangcai_entry.js",
+  "main": "congqianghema_entry.js",
   "name": "聪抢盒马",
   "packageName": "com.touchren.congqianghema",
   "scripts": {},
