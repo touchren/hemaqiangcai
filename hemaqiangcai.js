@@ -20,11 +20,11 @@ const OTHER_ALLOW_PACKAGE_NAMES = [
 // 配置文件的相对路径
 const CONFIG_PATH = "./config.js";
 // 最大尝试轮数
-const MAX_ROUND = 5;
+const MAX_ROUND = 3;
 // 每轮最长重试次数 (300次约8分钟)
-const MAX_TIMES_PER_ROUND = 300;
+const MAX_TIMES_PER_ROUND = 600;
 // 点击按钮之后的通用等待时间
-const COMMON_SLEEP_TIME_IN_MILLS = 200;
+const COMMON_SLEEP_TIME_IN_MILLS = 500;
 // 是否先强行停止APP
 const ACTIVE_STOP_APP = 1;
 // 几秒提醒一次
@@ -1326,11 +1326,12 @@ function reload_mall_cart() {
   let tempI = 0;
   do {
     scrollUpInCart();
+    commonWait();
     tempI++;
     // 22/05/25 貌似这个页面的 [加载中] text 一直都在,只是不能查出来而已; 反倒是[盒马鲜生], 如果滚到下面是查不到的
     reloadSuccess = text("盒马鲜生").findOne(100);
   } while (!reloadSuccess && tempI < 50);
-  sleep(random(500, 1000));
+  sleep(random(1000, 2000));
   if (ACTIVE_STOP_APP == 1 && !text("盒马鲜生").findOne(5000)) {
     printPageUIObject();
     if (text("我常买").exists()) {
@@ -1412,8 +1413,8 @@ function randomSwipe(sx, sy, ex, ey) {
   }
   //log(sx, sy, ex, ey);
   //设置随机滑动时长范围
-  var timeMin = 250;
-  var timeMax = 300;
+  var timeMin = 220;
+  var timeMax = 235;
   //设置控制点极限距离
   var leaveHeightLength = 300;
 
